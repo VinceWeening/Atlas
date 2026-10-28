@@ -1,0 +1,9 @@
+# Voor ZimaOS: App Store › Eigen app installeren › dit bestand importeren.
+name: atlas
+services:
+  atlas:
+    image: ghcr.io/vinceweening/atlas:latest
+    container_name: atlas
+    restart: unless-stopped
+    ports:
+      - "8790:8790"

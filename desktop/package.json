@@ -1,0 +1,12 @@
+{
+  "name": "@atlas/desktop",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "build": "tauri build",
+    "dev": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  }
+}

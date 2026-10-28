@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07090D">
+<title>Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+</head>
+<body>
+<div class="app">
+  <div class="huis" id="huis" aria-label="Plattegrond"></div>
+
+  <div class="stage">
+    <section class="gl klok" aria-label="Tijd en weer"><div class="gl-in">
+      <svg class="ring" aria-hidden="true" viewBox="0 0 220 220">
+        <defs><linearGradient id="arc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6EDFF"/><stop offset="1" stop-color="#6FA8FF"/></linearGradient></defs>
+        <g class="spin"><circle cx="110" cy="110" r="100" fill="none" stroke="rgba(168,216,255,0.4)" stroke-width="3" stroke-dasharray="3 18"/></g>
+        <circle cx="110" cy="110" r="80" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+        <circle id="dagboog" cx="110" cy="110" r="80" fill="none" stroke="url(#arc)" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 503" transform="rotate(-90 110 110)"/>
+      </svg>
+      <div>
+        <p class="tijd" id="tijd">--:--</p>
+        <p class="muted klein"><span id="datum"></span> · <span class="warm" id="weer"></span></p>
+      </div>
+    </div></section>
+
+    <div class="midden-boven">
+      <span class="lbl">ATLAS · THUIS</span>
+      <div class="knoppen">
+        <div class="gl pil"><div class="gl-in segment" id="verdiepingen"></div></div>
+        <div class="gl pil"><div class="gl-in segment">
+          <button type="button" data-modus="2d">2D</button>
+          <button type="button" data-modus="3d">3D</button>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="hud" id="hud"></div>
+
+    <section class="gl vandaag" aria-label="Vandaag"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">VANDAAG</h2><span class="mono muted klein" id="aantal-afspraken"></span></div>
+      <div id="agenda"></div>
+      <p class="muted klein morgen" id="morgen"></p>
+    </div></section>
+
+    <section class="gl kamer" aria-label="Kamer"><div class="gl-in paneel">
+      <span class="lbl" id="kamer-label">KAMER</span>
+      <div class="kop"><p class="kamer-naam" id="kamer-naam"></p><p class="mono kamer-temp" id="kamer-temp"></p></div>
+      <div id="lampen"></div>
+    </div></section>
+
+    <section class="gl mail" aria-label="Mail"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">MAIL</h2><span class="mono muted klein" id="mail-aantal"></span></div>
+      <div id="mail"></div>
+    </div></section>
+
+    <div class="midden-onder">
+      <button type="button" class="orb" aria-label="Spraak, komt in fase 3"></button>
+      <span class="lbl zacht">"HEY ATLAS" · FASE 3</span>
+      <div class="gl pil"><div class="gl-in segment scenes">
+        <button type="button">Filmavond</button>
+        <button type="button" class="actief-warm">Werken</button>
+        <button type="button">Slapen</button>
+        <button type="button">Alles uit</button>
+      </div></div>
+    </div>
+
+    <section class="gl voordeur" aria-label="Voordeur"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">VOORDEUR</h2><span class="mono muted klein">camera</span></div>
+      <div class="camera"><span class="chip"><span class="stip"></span><span id="beweging"></span></span><span class="lbl zacht hoek">CAMERABEELD</span></div>
+    </div></section>
+  </div>
+
+  <p class="voorbeeld" id="voorbeeld" hidden>Voorbeeldgegevens · echte koppelingen komen in fase 2</p>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
