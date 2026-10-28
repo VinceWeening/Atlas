@@ -11,13 +11,15 @@ RUN npm run build
 
 FROM node:22-alpine
 WORKDIR /app
-ENV NODE_ENV=production PORT=8790 WEB_DIR=/app/web/dist
+ENV NODE_ENV=production PORT=8790 WEB_DIR=/app/web/dist DATA_DIR=/app/data
 COPY package.json package-lock.json ./
 COPY web/package.json web/
 COPY server/package.json server/
 RUN npm ci --omit=dev --workspace server && npm cache clean --force
 COPY --from=bouw /app/server/dist server/dist
 COPY --from=bouw /app/web/dist web/dist
+# Koppelingen en instellingen; in compose een eigen volume zodat ze updates overleven.
+RUN mkdir -p /app/data && chown node:node /app/data
 ARG ATLAS_VERSION=dev
 ENV ATLAS_VERSION=$ATLAS_VERSION
 EXPOSE 8790

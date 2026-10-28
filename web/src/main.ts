@@ -1,12 +1,17 @@
 import './styles.css';
 import { lagen, type Ruimte } from './huis';
+import { instellingen } from './instellingen';
 
 type Overzicht = {
   voorbeeld: boolean;
   weer: { omschrijving: string; temperatuur: number };
-  agenda: { tijd: string; titel: string; detail: string }[];
+  agenda: { tijd: string; titel: string; detail: string; kleur?: string | null }[];
   morgen: string;
-  mail: { van: string; onderwerp: string }[];
+  mail: { van: string; onderwerp: string; link?: string }[];
+  mailAantal?: number;
+  agendaFout?: boolean;
+  mailFout?: boolean;
+  google?: { ingesteld: boolean; gekoppeld: boolean };
 };
 type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
 type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
@@ -293,7 +298,7 @@ function tekenWeer() {
 function tekenOpmerking() {
   const opmerking = $('voorbeeld');
   if (staat.huis?.bron === 'voorbeeld') tekst(opmerking, 'Voorbeeldgegevens · stel Home Assistant in om je eigen huis te zien');
-  else tekst(opmerking, 'Agenda en mail zijn nog voorbeeld · Google-koppeling volgt');
+  else tekst(opmerking, 'Agenda en mail zijn nog voorbeeld · koppel Google via het tandwiel');
   opmerking.hidden = !staat.overzicht?.voorbeeld && staat.huis?.bron !== 'voorbeeld';
 }
 
@@ -309,21 +314,30 @@ function tekenAlles() {
 }
 
 function tekenOverzicht(o: Overzicht) {
-  tekst($('aantal-afspraken'), `${o.agenda.length} afspraken`);
+  tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
   $('agenda').replaceChildren(
+    ...(o.agenda.length === 0 && !o.agendaFout ? [maak('p', 'muted klein', 'Niets meer vandaag.')] : []),
     ...o.agenda.map((a) => {
       const rij = maak('div', 'afspraak');
       const blok = maak('div');
+      if (a.kleur) blok.style.borderLeftColor = a.kleur;
       blok.append(maak('strong', undefined, a.titel), maak('span', 'muted klein', a.detail));
       rij.append(maak('span', 'mono', a.tijd), blok);
       return rij;
     }),
   );
-  tekst($('morgen'), `Morgen ${o.morgen}`);
-  tekst($('mail-aantal'), `${o.mail.length} ongelezen`);
+  tekst($('morgen'), o.morgen ? `Morgen ${o.morgen}` : 'Morgen niets gepland');
+  const aantal = o.mailAantal ?? o.mail.length;
+  tekst($('mail-aantal'), o.mailFout ? 'niet bereikbaar' : o.voorbeeld ? `${aantal} ongelezen` : `${aantal} belangrijk`);
   $('mail').replaceChildren(
+    ...(o.mail.length === 0 && !o.mailFout ? [maak('p', 'muted klein', 'Geen belangrijke mail.')] : []),
     ...o.mail.map((m) => {
-      const rij = maak('div', 'mailregel');
+      const rij = maak(m.link ? 'a' : 'div', 'mailregel');
+      if (m.link && rij instanceof HTMLAnchorElement) {
+        rij.href = m.link;
+        rij.target = '_blank';
+        rij.rel = 'noopener';
+      }
       rij.append(maak('strong', undefined, m.van), maak('span', 'muted', m.onderwerp));
       return rij;
     }),
@@ -381,6 +395,7 @@ $('camera-wissel').addEventListener('click', () => {
 $<HTMLImageElement>('camera-beeld').addEventListener('load', (e) => ((e.target as HTMLImageElement).hidden = false));
 $<HTMLImageElement>('camera-beeld').addEventListener('error', (e) => ((e.target as HTMLImageElement).hidden = true));
 
+instellingen(laadOverzicht);
 tikKlok();
 setInterval(tikKlok, 1000);
 tekenAlles();

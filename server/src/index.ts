@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
+import { Google } from './google.js';
 import { HomeAssistant, haInstellingen } from './ha.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
@@ -25,7 +26,62 @@ app.log.info(ha ? `Home Assistant op ${ha.url}` : 'Geen HA_URL en HA_TOKEN inges
 // Alleen gewone entiteitnamen van het juiste soort komen door naar Home Assistant.
 const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-z0-9_]+$`).test(waarde) ? waarde : null);
 
-app.get('/api/overzicht', async () => ({ ...voorbeeld, voorbeeld: true }));
+const google = Google.uitOmgeving();
+app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');
+
+app.get('/api/overzicht', async () => {
+  const status = { ingesteld: !!google, gekoppeld: !!google?.gekoppeld };
+  if (!google?.gekoppeld) return { ...voorbeeld, voorbeeld: true, google: status };
+  // Agenda en mail apart, zodat een fout in de een de ander niet meeneemt.
+  const [afspraken, post] = await Promise.allSettled([google.afspraken(), google.mail()]);
+  for (const r of [afspraken, post]) if (r.status === 'rejected') app.log.warn(r.reason);
+  return {
+    voorbeeld: false,
+    google: status,
+    weer: voorbeeld.weer,
+    agenda: afspraken.status === 'fulfilled' ? afspraken.value.vandaag : [],
+    morgen: afspraken.status === 'fulfilled' ? afspraken.value.morgen : '',
+    agendaFout: afspraken.status === 'rejected',
+    mail: post.status === 'fulfilled' ? post.value.mail : [],
+    mailAantal: post.status === 'fulfilled' ? post.value.aantal : 0,
+    mailFout: post.status === 'rejected',
+  };
+});
+
+app.get('/api/google', async () => {
+  if (!google) return { ingesteld: false, gekoppeld: false, agendas: [] };
+  const agendas = google.gekoppeld ? await google.agendas().catch(() => []) : [];
+  return { ingesteld: true, gekoppeld: google.gekoppeld, agendas };
+});
+
+app.post('/api/google/start', async (_request, reply) => {
+  if (!google) return reply.code(400).send({ fout: 'Google is nog niet ingesteld op de server' });
+  return { adres: google.koppelAdres() };
+});
+
+app.post<{ Body: { adres?: unknown } }>('/api/google/koppel', async (request, reply) => {
+  if (!google) return reply.code(400).send({ fout: 'Google is nog niet ingesteld op de server' });
+  if (typeof request.body?.adres !== 'string') return reply.code(400).send({ fout: 'Plak het adres uit je browser' });
+  try {
+    await google.koppel(request.body.adres);
+    return { ok: true };
+  } catch (fout) {
+    return reply.code(400).send({ fout: (fout as Error).message });
+  }
+});
+
+app.delete('/api/google', async () => {
+  google?.ontkoppel();
+  return { ok: true };
+});
+
+app.post<{ Body: { id?: unknown; aan?: unknown } }>('/api/google/agenda', async (request, reply) => {
+  const { id, aan } = request.body ?? {};
+  if (!google?.gekoppeld || typeof id !== 'string' || typeof aan !== 'boolean') return reply.code(400).send({ fout: 'Onbekende agenda' });
+  if (!(await google.agendas()).some((a) => a.id === id)) return reply.code(404).send({ fout: 'Onbekende agenda' });
+  google.zetAgenda(id, aan);
+  return { ok: true };
+});
 
 app.get('/api/huis', async (_request, reply) => {
   try {

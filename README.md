@@ -47,6 +47,25 @@ Atlas vraagt zelf aan Home Assistant welke ruimtes, lampen, temperatuursensoren,
 
 Lampen verschijnen in de kamer waaraan ze in Home Assistant zijn toegewezen. De plattegrond koppelt een kamer op naam (bijvoorbeeld "Woonkamer" of "Keuken"); kamers die niet op de plattegrond staan kies je in de keuzelijst van het kamerpaneel. Lampen zonder ruimte staan onder "Overige lampen".
 
+## Google Agenda en Gmail koppelen
+
+Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor maak je eenmalig een eigen, gratis koppeling in Google Cloud. Er gaat niets via een externe dienst.
+
+1. Ga naar [console.cloud.google.com](https://console.cloud.google.com), log in met je Google-account en maak een nieuw project, bijvoorbeeld "Atlas".
+2. Zoek bovenin naar **Google Calendar API** en klik op **Inschakelen**. Doe hetzelfde voor **Gmail API**.
+3. Ga naar **Google Auth Platform** (of "OAuth-toestemmingsscherm") en klik op **Aan de slag**:
+   - App-naam: Atlas, ondersteuningsmail: je eigen adres.
+   - Doelgroep: **Extern**.
+   - Contactgegevens: je eigen adres. Accepteer de voorwaarden en klik op **Maken**.
+4. Ga onder Google Auth Platform naar **Doelgroep** en klik op **App publiceren** (status "In productie"). In de teststatus verloopt de koppeling na 7 dagen. Een melding dat de app niet geverifieerd is, mag je negeren: alleen jij gebruikt hem.
+5. Ga naar **Clients**, klik op **Client maken**, kies als type **Desktop-app** en noem hem "Atlas". Je krijgt een client-ID en een clientgeheim.
+6. Vul die in ZimaOS bij de app Atlas in als `GOOGLE_CLIENT_ID` en `GOOGLE_CLIENT_SECRET` en sla op.
+7. Open Atlas, klik op het tandwiel en daarna op **Open Google**:
+   - Kies je account. Bij "Google heeft deze app niet geverifieerd" klik je op **Geavanceerd** en **Ga naar Atlas**, en geef je toestemming.
+   - Je komt op een pagina die niet laadt (`127.0.0.1`). Dat hoort zo: kopieer het hele adres uit de adresbalk, plak het in Atlas en klik op **Koppelen**.
+
+Daarna kies je in het tandwiel welke agenda's Atlas laat zien. De koppeling staat in het volume `atlas-data`, dus een update van Atlas laat hem staan.
+
 ## Zelf ontwikkelen
 
 ```bash
