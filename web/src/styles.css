@@ -155,6 +155,30 @@ p, h1, h2 { margin: 0; }
 }
 .kamer-keuze option { background: #11151C; color: #F4F6FA; }
 [hidden] { display: none !important; }
+a.mailregel { color: inherit; text-decoration: none; border-radius: 8px; }
+a.mailregel:hover strong { color: var(--ijs-licht); }
+
+/* Instellingen */
+.instellingen {
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; margin: auto;
+  color: var(--tekst); border: 0; overflow: auto;
+}
+.instellingen::backdrop { background: rgba(4,6,10,0.6); backdrop-filter: blur(6px); }
+.inst-sectie { display: flex; flex-direction: column; gap: 12px; }
+.inst-stappen { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--gedempt); }
+.inst-rij { display: flex; gap: 8px; }
+.inst-veld {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 14px; font: inherit; font-size: 14px;
+  color: var(--tekst); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+}
+.inst-veld:focus-visible, .knop:focus-visible { outline: 2px solid var(--ijs); outline-offset: 2px; }
+.knop {
+  min-height: 44px; padding: 0 18px; border-radius: 22px; border: 0; font: inherit; font-size: 14px; font-weight: 500;
+  color: #0B1018; background: linear-gradient(180deg, var(--ijs-licht), var(--ijs)); align-self: flex-start;
+}
+.knop.zacht { color: var(--tekst); background: rgba(255,255,255,0.08); font-weight: 400; }
+.knop:disabled { opacity: 0.5; }
+.agenda-stip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .chip { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: rgba(12,15,21,0.7); font-size: 12px; }
 .stip { width: 8px; height: 8px; border-radius: 50%; background: var(--ijs); box-shadow: 0 0 0 4px rgba(168,216,255,0.18); }
 .voorbeeld { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: rgba(235,240,248,0.35); }

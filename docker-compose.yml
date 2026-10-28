@@ -7,6 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "8790:8790"
+    volumes:
+      # Hier bewaart Atlas de Google-koppeling en je instellingen.
+      - atlas-data:/app/data
     environment:
       # Adres van Home Assistant, zoals je het in de browser opent (dus niet localhost).
       HA_URL: "http://192.168.1.10:8123"
@@ -14,3 +17,9 @@ services:
       HA_TOKEN: ""
       # Optioneel: welke camera vooraan staat, bijvoorbeeld camera.voordeur.
       HA_VOORDEUR: ""
+      # Google-koppeling (zie README): de client-ID en het clientgeheim van je eigen OAuth-client.
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+
+volumes:
+  atlas-data:
