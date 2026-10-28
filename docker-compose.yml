@@ -3,6 +3,8 @@ name: atlas
 services:
   atlas:
     image: ghcr.io/vinceweening/atlas:latest
+    # Bij elke (her)installatie de nieuwste versie ophalen.
+    pull_policy: always
     container_name: atlas
     restart: unless-stopped
     ports:
