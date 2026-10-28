@@ -33,6 +33,20 @@ De pc-app bewaart geen inloggegevens. Hij opent alleen de pagina van de server. 
 
 Daarna start Atlas met Windows mee, stil in het systeemvak. Klik op het icoon om het venster te openen. Sluiten verstopt het venster; echt afsluiten gaat via het menu van het icoon. Daar kun je ook het server-adres wijzigen.
 
+## Home Assistant koppelen
+
+Atlas vraagt zelf aan Home Assistant welke ruimtes, lampen, temperatuursensoren, camera's, scènes en weerbericht er zijn. Je hoeft niets per lamp in te stellen.
+
+1. Open Home Assistant, klik linksonder op je profiel en ga naar **Beveiliging**.
+2. Maak onderaan een **langdurige toegangscode** aan, bijvoorbeeld met de naam "Atlas", en kopieer hem.
+3. Open in ZimaOS de instellingen van de app Atlas en vul bij de omgevingsvariabelen in:
+   - `HA_URL`: het adres van Home Assistant, bijvoorbeeld `http://192.168.1.10:8123` (niet `localhost`, want Atlas draait in zijn eigen container).
+   - `HA_TOKEN`: de code uit stap 2.
+   - `HA_VOORDEUR` (optioneel): de camera die vooraan moet staan, bijvoorbeeld `camera.voordeur`.
+4. Sla op; de app start opnieuw en toont je eigen huis.
+
+Lampen verschijnen in de kamer waaraan ze in Home Assistant zijn toegewezen. De plattegrond koppelt een kamer op naam (bijvoorbeeld "Woonkamer" of "Keuken"); kamers die niet op de plattegrond staan kies je in de keuzelijst van het kamerpaneel. Lampen zonder ruimte staan onder "Overige lampen".
+
 ## Zelf ontwikkelen
 
 ```bash
