@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Standaardrechten voor het hoofdvenster",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
