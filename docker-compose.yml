@@ -7,3 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "8790:8790"
+    environment:
+      # Adres van Home Assistant, zoals je het in de browser opent (dus niet localhost).
+      HA_URL: "http://192.168.1.10:8123"
+      # Langdurige toegangscode uit Home Assistant (Profiel › Beveiliging). Leeg = voorbeeldhuis.
+      HA_TOKEN: ""
+      # Optioneel: welke camera vooraan staat, bijvoorbeeld camera.voordeur.
+      HA_VOORDEUR: ""

@@ -47,7 +47,7 @@
     </div></section>
 
     <section class="gl kamer" aria-label="Kamer"><div class="gl-in paneel">
-      <span class="lbl" id="kamer-label">KAMER</span>
+      <div class="kop"><span class="lbl" id="kamer-label">KAMER</span><select class="kamer-keuze" id="kamer-keuze" aria-label="Kies een ruimte" hidden></select></div>
       <div class="kop"><p class="kamer-naam" id="kamer-naam"></p><p class="mono kamer-temp" id="kamer-temp"></p></div>
       <div id="lampen"></div>
     </div></section>
@@ -60,17 +60,16 @@
     <div class="midden-onder">
       <button type="button" class="orb" aria-label="Spraak, komt in fase 3"></button>
       <span class="lbl zacht">"HEY ATLAS" · FASE 3</span>
-      <div class="gl pil"><div class="gl-in segment scenes">
-        <button type="button">Filmavond</button>
-        <button type="button" class="actief-warm">Werken</button>
-        <button type="button">Slapen</button>
-        <button type="button">Alles uit</button>
-      </div></div>
+      <div class="gl pil" id="scenes-pil" hidden><div class="gl-in segment scenes" id="scenes"></div></div>
     </div>
 
-    <section class="gl voordeur" aria-label="Voordeur"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">VOORDEUR</h2><span class="mono muted klein">camera</span></div>
-      <div class="camera"><span class="chip"><span class="stip"></span><span id="beweging"></span></span><span class="lbl zacht hoek">CAMERABEELD</span></div>
+    <section class="gl voordeur" aria-label="Camera"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">CAMERA</h2><button type="button" class="camera-wissel mono klein" id="camera-wissel" hidden></button></div>
+      <div class="camera">
+        <img id="camera-beeld" alt="" hidden>
+        <span class="chip" hidden><span class="stip"></span><span id="beweging"></span></span>
+        <span class="lbl zacht hoek" id="camera-naam">camera</span>
+      </div>
     </div></section>
   </div>
 
