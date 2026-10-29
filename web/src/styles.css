@@ -227,6 +227,44 @@ p, h1, h2 { margin: 0; }
 .instellingen.camera-groot { width: min(1280px, calc(100vw - 32px)); }
 #camera-groot-beeld { width: 100%; max-height: calc(100vh - 200px); object-fit: contain; border-radius: 16px; display: block; background: rgba(255,255,255,0.04); }
 
+/* Ster en pijl in Apparaten */
+.icoon-knop { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--gedempt); cursor: pointer; opacity: 0.55; transition: opacity 200ms ease, color 200ms ease, background 200ms ease; }
+.icoon-knop svg { fill-opacity: 0; }
+.icoon-knop:hover, .icoon-knop:focus-visible { opacity: 1; background: rgba(255,255,255,0.06); }
+.icoon-knop.aan { opacity: 1; color: var(--warm); }
+.icoon-knop.aan svg { fill-opacity: 1; }
+.icoon-knop:focus-visible { outline: 2px solid var(--ijs); outline-offset: 1px; }
+.apparaat .lamp-info { flex: 1; min-width: 0; }
+.apparaat { gap: 4px; }
+
+/* Kaart Favorieten: tegels die oplichten als de lamp aan is */
+.favorieten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.favoriet {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; min-width: 0; border-radius: 16px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: inherit; font: inherit; text-align: left;
+  transition: background 250ms ease, border-color 250ms ease, box-shadow 250ms ease;
+}
+.favoriet strong { font-weight: 500; font-size: 14px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 6px; }
+.favoriet .klein { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.favoriet-lamp { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.18); transition: background 250ms ease, box-shadow 250ms ease; }
+.favoriet.aan { background: rgba(255,186,110,0.12); border-color: rgba(255,186,110,0.35); box-shadow: 0 0 24px -8px rgba(255,186,110,0.5); }
+.favoriet.aan .favoriet-lamp { background: var(--warm); box-shadow: 0 0 12px var(--warm); }
+.favoriet:hover { border-color: rgba(255,255,255,0.18); }
+.favoriet:focus-visible { outline: 2px solid var(--ijs); outline-offset: 2px; }
+.favoriet:disabled { opacity: 0.45; cursor: default; }
+
+/* Terugkijken */
+.opnames { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.opname-kaart { position: relative; padding: 0; border: 0; overflow: hidden; color: inherit; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
+.opname-kaart img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: rgba(255,255,255,0.04); }
+.opname-speel { position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(7,9,13,0.6); backdrop-filter: blur(8px); color: var(--tekst); }
+.opname-tekst { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 14px; }
+.opname-tekst strong { font-weight: 500; font-size: 14px; }
+.opname-kaart:hover .opname-speel { background: var(--ijs); color: #07090D; }
+.opname-kaart:focus-visible { outline: 2px solid var(--ijs); outline-offset: 3px; }
+#opname-video { width: 100%; max-height: calc(100vh - 200px); border-radius: 16px; background: #000; display: block; }
+.pagina > .kop { margin-top: 8px; }
+
 /* App-blokken */
 .app-link { color: var(--ijs); text-decoration: none; }
 .app-link:hover { color: var(--ijs-licht); }

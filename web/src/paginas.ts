@@ -30,7 +30,12 @@ const FILTERS: [string, string, string[] | null][] = [
 
 const staat = { filter: 'alles', zoek: '', data: null as Apparaten | null, fout: false, bezig: new Set<string>() };
 
-export function maakApparaten(opVerandering: () => void) {
+type Lijsten = { heeft: (lijst: 'favorieten' | 'snelkoppelingen', id: string) => boolean; wissel: (lijst: 'favorieten' | 'snelkoppelingen', id: string) => Promise<void> };
+
+const STER = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>';
+const ONDERIN = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="15" width="18" height="6" rx="3"/><path d="M12 3v8m-3.5-3.5L12 11l3.5-3.5"/></svg>';
+
+export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   const pagina = document.getElementById('pagina-apparaten')!;
   const zoek = pagina.querySelector<HTMLInputElement>('#apparaten-zoek')!;
   const filters = pagina.querySelector<HTMLElement>('#apparaten-filters')!;
@@ -80,6 +85,26 @@ export function maakApparaten(opVerandering: () => void) {
     namen.append(a.naam, ...(a.tekst ? [maak('small', undefined, a.tekst)] : []));
     info.append(namen);
     r.append(info);
+    if (a.bediening) {
+      // Ster: op de kaart Favorieten. Pijl: als knop onderin.
+      for (const [lijst, icoon, label] of [
+        ['favorieten', STER, 'favorieten'],
+        ['snelkoppelingen', ONDERIN, 'de knoppen onderin'],
+      ] as const) {
+        const aan = lijsten.heeft(lijst, a.id);
+        const k = maak('button', 'icoon-knop' + (aan ? ' aan' : ''));
+        k.type = 'button';
+        k.innerHTML = icoon;
+        k.setAttribute('aria-pressed', String(aan));
+        k.setAttribute('aria-label', `${a.naam} ${aan ? 'weghalen uit' : 'toevoegen aan'} ${label}`);
+        k.title = aan ? `Weghalen uit ${label}` : `Toevoegen aan ${label}`;
+        k.addEventListener('click', async () => {
+          await lijsten.wissel(lijst, a.id);
+          teken();
+        });
+        r.append(k);
+      }
+    }
     if (a.bediening === 'schakel') {
       const s = maak('button', 'schakelaar');
       s.type = 'button';
@@ -145,6 +170,16 @@ export function maakApparaten(opVerandering: () => void) {
   return { laad };
 }
 
+type Opname = { id: string; camera: string; titel: string; tijd: string; duur: number | null; beeld: string; video: string };
+
+const wanneer = (iso: string) => {
+  const d = new Date(iso);
+  const tijd = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return `vandaag ${tijd}`;
+  if (d.toDateString() === new Date(Date.now() - 86_400_000).toDateString()) return `gisteren ${tijd}`;
+  return `${d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })} ${tijd}`;
+};
+
 export function maakCameras() {
   const lijst = document.getElementById('cameras-lijst')!;
   const groot = document.getElementById('camera-groot') as HTMLDialogElement;
@@ -196,9 +231,65 @@ export function maakCameras() {
   setInterval(() => {
     if (open && groot.open) grootBeeld.src = adres(open);
   }, 2000);
+
+  // Terugkijken: de laatste opnames van Frigate, met een eigen videovenster.
+  const opnamesLijst = document.getElementById('opnames-lijst')!;
+  const videoVenster = document.getElementById('opname') as HTMLDialogElement;
+  const video = document.getElementById('opname-video') as HTMLVideoElement;
+  let opnamesSleutel = '';
+  async function laadOpnames() {
+    let opnames: Opname[] | null = null;
+    try {
+      const antwoord = await fetch('/api/opnames');
+      if (antwoord.ok) opnames = await antwoord.json();
+    } catch {
+      // Hieronder een melding.
+    }
+    const sleutel = JSON.stringify(opnames?.map((o) => o.id) ?? null);
+    if (sleutel === opnamesSleutel) return;
+    opnamesSleutel = sleutel;
+    if (!opnames) {
+      opnamesLijst.replaceChildren(maak('p', 'muted klein', 'Frigate is niet gevonden of reageert niet.'));
+      return;
+    }
+    if (!opnames.length) {
+      opnamesLijst.replaceChildren(maak('p', 'muted klein', 'Nog geen opnames. Staat opnemen (record) aan in Frigate?'));
+      return;
+    }
+    opnamesLijst.replaceChildren(
+      ...opnames.map((o) => {
+        const kaart = maak('button', 'gl opname-kaart');
+        kaart.type = 'button';
+        kaart.setAttribute('aria-label', `Opname ${o.titel} bij ${o.camera}, ${wanneer(o.tijd)} afspelen`);
+        const beeld = maak('img');
+        beeld.alt = '';
+        beeld.loading = 'lazy';
+        beeld.src = o.beeld;
+        const speel = maak('span', 'opname-speel');
+        speel.innerHTML = '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+        const tekst = maak('span', 'opname-tekst');
+        tekst.append(maak('strong', undefined, `${o.titel} · ${o.camera}`), maak('span', 'muted klein', `${wanneer(o.tijd)}${o.duur ? ` · ${o.duur} s` : ''}`));
+        kaart.append(beeld, speel, tekst);
+        kaart.addEventListener('click', () => {
+          document.getElementById('opname-titel')!.textContent = `${o.titel} bij ${o.camera} · ${wanneer(o.tijd)}`;
+          video.src = o.video;
+          videoVenster.showModal();
+          video.play().catch(() => {});
+        });
+        return kaart;
+      }),
+    );
+  }
+  document.getElementById('opname-sluit')!.addEventListener('click', () => videoVenster.close());
+  videoVenster.addEventListener('click', (e) => e.target === videoVenster && videoVenster.close());
+  videoVenster.addEventListener('close', () => {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  });
   document.getElementById('camera-groot-sluit')!.addEventListener('click', () => groot.close());
   groot.addEventListener('click', (e) => e.target === groot && groot.close());
   groot.addEventListener('close', () => (open = null));
 
-  return { zet, ververs };
+  return { zet, ververs, laadOpnames };
 }

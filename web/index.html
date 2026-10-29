@@ -72,6 +72,11 @@
       <div id="lampen"></div>
     </div></section>
 
+    <section class="gl" aria-label="Favorieten" data-blok="favorieten"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">FAVORIETEN</h2></div>
+      <div class="favorieten" id="favorieten"></div>
+    </div></section>
+
     <section class="gl app-blok" aria-label="Frigate" data-blok="frigate"><div class="gl-in paneel">
       <div class="kop"><h2 class="lbl">FRIGATE</h2><a class="mono klein app-link" data-app-link="frigate" target="_blank" rel="noopener" hidden>Openen ›</a></div>
       <div id="app-frigate"><p class="muted klein">Laden…</p></div>
@@ -120,8 +125,15 @@
 
     <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
       <div class="camera-raster" id="cameras-lijst"></div>
+      <div class="kop"><h2 class="lbl">TERUGKIJKEN</h2></div>
+      <div class="opnames" id="opnames-lijst"></div>
     </section>
   </div>
+
+  <dialog class="gl instellingen camera-groot" id="opname" aria-labelledby="opname-titel"><div class="gl-in paneel">
+    <div class="kop"><h2 class="kamer-naam" id="opname-titel"></h2><button type="button" class="knop zacht" id="opname-sluit">Sluiten</button></div>
+    <video id="opname-video" controls playsinline preload="metadata"></video>
+  </div></dialog>
 
   <dialog class="gl instellingen camera-groot" id="camera-groot" aria-labelledby="camera-groot-naam"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="camera-groot-naam"></h2><button type="button" class="knop zacht" id="camera-groot-sluit">Sluiten</button></div>

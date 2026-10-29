@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { Readable } from 'node:stream';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
@@ -105,11 +106,13 @@ app.get<{ Querystring: { na?: string } }>('/api/meldingen', async (request) => {
 });
 
 app.get('/api/meldingen/opties', async () => {
-  const [cameras, toestellen] = await Promise.allSettled([meldingen.frigateCameras(), huis.toestellen()]);
+  const [cameras, toestellen, details] = await Promise.allSettled([meldingen.frigateCameras(), huis.toestellen(), meldingen.frigateDetails()]);
   return {
     frigate: { ingesteld: meldingen.ingesteld, bereikbaar: cameras.status === 'fulfilled' && meldingen.ingesteld },
     cameras: cameras.status === 'fulfilled' ? cameras.value : [],
     toestellen: toestellen.status === 'fulfilled' ? toestellen.value : [],
+    zones: details.status === 'fulfilled' ? details.value.zones : [],
+    gezichten: details.status === 'fulfilled' ? details.value.gezichten : [],
     soorten: SOORTEN,
   };
 });
@@ -120,6 +123,24 @@ app.get<{ Params: { camera: string } }>('/api/meldingen/camera/:camera/beeld', a
   const beeld = await meldingen.cameraBeeld(request.params.camera).catch(() => null);
   if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
   return reply.header('cache-control', 'no-store').type(beeld.type).send(beeld.data);
+});
+
+app.get('/api/opnames', async (_request, reply) => {
+  try {
+    return await meldingen.opnames();
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Frigate is niet bereikbaar' });
+  }
+});
+
+app.get<{ Params: { id: string } }>('/api/meldingen/:id/video', async (request, reply) => {
+  const video = await meldingen.video(request.params.id, request.headers.range).catch(() => null);
+  if (!video) return reply.code(404).send({ fout: 'Geen opname' });
+  reply.code(video.status);
+  for (const kop of ['content-type', 'content-length', 'content-range', 'accept-ranges'])
+    if (video.headers.get(kop)) reply.header(kop, video.headers.get(kop)!);
+  return reply.send(Readable.fromWeb(video.body as import('node:stream/web').ReadableStream));
 });
 
 app.get<{ Params: { id: string } }>('/api/meldingen/:id/beeld', async (request, reply) => {
