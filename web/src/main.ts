@@ -424,6 +424,181 @@ async function laadMeldingen() {
   }
 }
 
+// Blokken voor de apps op de server.
+type AppBasis = { gevonden: boolean; poort?: number; sleutel?: boolean; bereikbaar?: boolean };
+type Apps = {
+  frigate: (AppBasis & { vandaag?: Record<string, number>; laatste?: { id: string; camera: string; soort: string; tijd: string; beeld: string }[] }) | null;
+  jellyfin: (AppBasis & { verder?: Media[]; nieuw?: Media[] }) | null;
+  seerr: (AppBasis & { wachtend?: number; bezig?: number; beschikbaar?: number }) | null;
+  downloads:
+    | (AppBasis & {
+        apps: { naam: string; poort: number; sleutel: boolean }[];
+        items?: { app: string; titel: string; voortgang: number; resterend: string | null; status: string }[];
+      })
+    | null;
+};
+type Media = { id: string; titel: string; sub: string; voortgang: number | null; beeld: string };
+
+const soortMeervoud: Record<string, [string, string]> = {
+  person: ['persoon', 'personen'],
+  car: ['auto', "auto's"],
+  bicycle: ['fiets', 'fietsen'],
+  motorcycle: ['motor', 'motoren'],
+  dog: ['hond', 'honden'],
+  cat: ['kat', 'katten'],
+  bird: ['vogel', 'vogels'],
+  package: ['pakket', 'pakketten'],
+};
+const cameraNaam = (camera: string) => camera.replace(/_/g, ' ').replace(/^\w/, (l) => l.toUpperCase());
+const appAdres = (poort: number) => `${location.protocol}//${location.hostname}:${poort}`;
+
+function balk(procent: number) {
+  const b = maak('div', 'balk');
+  const vul = maak('span');
+  vul.style.width = `${Math.max(0, Math.min(100, procent))}%`;
+  b.append(vul);
+  return b;
+}
+
+function plaatje(src: string, klasse: string) {
+  const img = maak('img', klasse);
+  img.alt = '';
+  img.loading = 'lazy';
+  img.src = src;
+  img.addEventListener('error', () => (img.style.visibility = 'hidden'));
+  return img;
+}
+
+function zetLink(id: string, poort: number | undefined) {
+  const link = document.querySelector<HTMLAnchorElement>(`[data-app-link="${id}"]`)!;
+  link.hidden = !poort;
+  if (poort) link.href = appAdres(poort);
+}
+
+function tekenApps(a: Apps) {
+  const melding = (tekst: string) => [maak('p', 'muted klein', tekst)];
+
+  if (a.frigate) {
+    const f = a.frigate;
+    zetLink('frigate', f.gevonden ? f.poort : undefined);
+    let inhoud: HTMLElement[];
+    if (!f.gevonden) inhoud = melding('Frigate niet gevonden op poort 5000.');
+    else if (!f.bereikbaar) inhoud = melding('Frigate reageert niet.');
+    else {
+      const telling = Object.entries(f.vandaag ?? {})
+        .sort((x, y) => y[1] - x[1])
+        .map(([soort, n]) => `${n} ${(soortMeervoud[soort] ?? [soort, soort])[n === 1 ? 0 : 1]}`);
+      inhoud = [maak('p', 'klein', telling.length ? `Vandaag ${telling.join(' · ')}` : 'Vandaag nog niets gezien.')];
+      if (f.laatste?.length) {
+        const rij = maak('div', 'app-beelden');
+        for (const g of f.laatste) {
+          const vak = maak('figure', 'app-beeld');
+          const onderschrift = maak('figcaption', 'klein');
+          onderschrift.append(maak('span', 'mono', uur(g.tijd)), ` ${cameraNaam(g.camera)}`);
+          vak.append(plaatje(g.beeld, ''), onderschrift);
+          rij.append(vak);
+        }
+        inhoud.push(rij);
+      }
+    }
+    $('app-frigate').replaceChildren(...inhoud);
+  }
+
+  if (a.jellyfin) {
+    const j = a.jellyfin;
+    zetLink('jellyfin', j.gevonden ? j.poort : undefined);
+    let inhoud: HTMLElement[];
+    if (!j.gevonden) inhoud = melding('Jellyfin niet gevonden op poort 8096.');
+    else if (!j.sleutel) inhoud = melding('Jellyfin draait. Vul JELLYFIN_KEY in bij Atlas in ZimaOS om te zien wat je kijkt.');
+    else if (!j.bereikbaar) inhoud = melding('Jellyfin reageert niet. Klopt JELLYFIN_KEY?');
+    else {
+      inhoud = [];
+      for (const m of j.verder ?? []) {
+        const rij = maak('div', 'media-rij');
+        const tekstDeel = maak('div');
+        tekstDeel.append(maak('strong', undefined, m.titel), maak('span', 'muted klein', m.sub));
+        if (m.voortgang != null) tekstDeel.append(balk(m.voortgang));
+        rij.append(plaatje(m.beeld, 'poster'), tekstDeel);
+        inhoud.push(rij);
+      }
+      if (j.nieuw?.length) {
+        inhoud.push(maak('p', 'inst-label', 'Nieuw'));
+        const rij = maak('div', 'posters');
+        for (const m of j.nieuw.slice(0, 5)) {
+          const p = plaatje(m.beeld, 'poster');
+          p.title = m.titel;
+          p.alt = m.titel;
+          rij.append(p);
+        }
+        inhoud.push(rij);
+      }
+      if (!inhoud.length) inhoud = melding('Niets om verder te kijken.');
+    }
+    $('app-jellyfin').replaceChildren(...inhoud);
+  }
+
+  if (a.seerr) {
+    const z = a.seerr;
+    zetLink('seerr', z.gevonden ? z.poort : undefined);
+    let inhoud: HTMLElement[];
+    if (!z.gevonden) inhoud = melding('Seerr niet gevonden op poort 5055.');
+    else if (!z.sleutel) inhoud = melding('Seerr draait. Vul SEERR_KEY in bij Atlas in ZimaOS om je aanvragen te zien.');
+    else if (!z.bereikbaar) inhoud = melding('Seerr reageert niet. Klopt SEERR_KEY?');
+    else {
+      const tegels = maak('div', 'tegels');
+      for (const [n, naam, warm] of [
+        [z.wachtend ?? 0, 'wachten', true],
+        [z.bezig ?? 0, 'bezig', false],
+        [z.beschikbaar ?? 0, 'beschikbaar', false],
+      ] as const) {
+        const t = maak('div', 'tegel' + (warm && n > 0 ? ' warm' : ''));
+        t.append(maak('span', 'mono tegel-getal', String(n)), maak('span', 'muted klein', naam));
+        tegels.append(t);
+      }
+      inhoud = [tegels];
+    }
+    $('app-seerr').replaceChildren(...inhoud);
+  }
+
+  if (a.downloads) {
+    const d = a.downloads;
+    zetLink('downloads', d.apps[0]?.poort);
+    let inhoud: HTMLElement[];
+    if (!d.gevonden) inhoud = melding('Sonarr en Radarr niet gevonden op poort 8989 en 7878.');
+    else if (!d.apps.some((x) => x.sleutel))
+      inhoud = melding(`${d.apps.map((x) => x.naam).join(' en ')} draait. Vul SONARR_KEY of RADARR_KEY in bij Atlas in ZimaOS om je downloads te zien.`);
+    else if (!d.items?.length) inhoud = melding('Niets aan het downloaden.');
+    else
+      inhoud = d.items.map((i) => {
+        const rij = maak('div', 'download');
+        const kop = maak('div', 'kop');
+        kop.append(maak('span', 'download-titel', i.titel), maak('span', 'mono muted klein', i.resterend ?? `${i.voortgang}%`));
+        rij.append(kop, balk(i.voortgang));
+        return rij;
+      });
+    $('app-downloads').replaceChildren(...inhoud);
+  }
+}
+
+async function laadApps() {
+  try {
+    const antwoord = await fetch('/api/apps');
+    if (antwoord.ok) tekenApps(await antwoord.json());
+  } catch {
+    // Volgende ronde opnieuw.
+  }
+}
+
+async function kijkVersie() {
+  try {
+    const v = (await (await fetch('/api/versie')).json()) as { nieuw: boolean };
+    $('tandwiel').classList.toggle('nieuw', v.nieuw);
+    $('tandwiel').setAttribute('aria-label', v.nieuw ? 'Instellingen, nieuwe versie beschikbaar' : 'Instellingen');
+  } catch {
+    // Later opnieuw.
+  }
+}
+
 async function laadInstellingen() {
   try {
     const antwoord = await fetch('/api/instellingen');
@@ -441,6 +616,7 @@ function zetInst(inst: Instellingen, eerste = false) {
   if (eerste) staat.scherm = inst.start[matchMedia('(max-width: 1000px)').matches ? 'smal' : 'breed'];
   pasToe();
   tekenBelangrijk();
+  if (!eerste) laadApps();
 }
 
 function tekenOverzicht(o: Overzicht) {
@@ -546,6 +722,10 @@ tekenBelangrijk();
 laadInstellingen();
 laadMeldingen();
 setInterval(laadMeldingen, 5_000);
+kijkVersie();
+setInterval(kijkVersie, 30 * 60_000);
+laadApps();
+setInterval(() => document.visibilityState === 'visible' && laadApps(), 30_000);
 setInterval(tekenBelangrijk, 3_600_000);
 tikKlok();
 setInterval(tikKlok, 1000);

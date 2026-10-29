@@ -27,6 +27,11 @@ services:
       GOOGLE_CLIENT_SECRET: ""
       # Meldingen (zie README): Atlas zoekt Frigate zelf. Alleen invullen als dat niet lukt, bijvoorbeeld http://192.168.1.10:5000.
       FRIGATE_URL: ""
+      # App-blokken (zie README): Atlas vindt de apps zelf, maar voor de inhoud is per app een API-sleutel nodig.
+      JELLYFIN_KEY: ""
+      SEERR_KEY: ""
+      SONARR_KEY: ""
+      RADARR_KEY: ""
 
 volumes:
   atlas-data:

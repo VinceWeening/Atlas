@@ -7,6 +7,8 @@ import { Google } from './google.js';
 import { HomeAssistant, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
+import { Apps } from './apps.js';
+import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +31,8 @@ app.log.info(ha ? `Home Assistant op ${ha.url}` : 'Geen HA_URL en HA_TOKEN inges
 const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-z0-9_]+$`).test(waarde) ? waarde : null);
 
 const meldingen = Meldingen.uitOmgeving(huis, app.log);
+
+const apps = new Apps(meldingen, app.log);
 
 const google = Google.uitOmgeving();
 app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');
@@ -116,6 +120,16 @@ app.get<{ Params: { id: string } }>('/api/meldingen/:id/beeld', async (request, 
   const beeld = await meldingen.beeld(request.params.id).catch(() => null);
   if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
   return reply.header('cache-control', 'max-age=3600').type(beeld.type).send(beeld.data);
+});
+
+app.get('/api/apps', async () => apps.alles());
+
+app.get('/api/versie', async () => versie());
+
+app.get<{ Params: { id: string } }>('/api/apps/jellyfin/beeld/:id', async (request, reply) => {
+  const beeld = await apps.jellyfinBeeld(request.params.id).catch(() => null);
+  if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
+  return reply.header('cache-control', 'max-age=86400').type(beeld.type).send(beeld.data);
 });
 
 app.get('/api/huis', async (_request, reply) => {

@@ -1,7 +1,9 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'camera', 'scenes', 'hud'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads'] as const;
+/** Blokken die standaard uit staan; de rest staat aan. */
+const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads'];
 type Blok = (typeof BLOKKEN)[number];
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
@@ -28,7 +30,7 @@ export type Instellingen = {
 };
 
 const standaard: Instellingen = {
-  blokken: Object.fromEntries(BLOKKEN.map((b) => [b, true])) as Record<Blok, boolean>,
+  blokken: Object.fromEntries(BLOKKEN.map((b) => [b, !STANDAARD_UIT.includes(b)])) as Record<Blok, boolean>,
   start: { breed: 'thuis', smal: 'overzicht' },
   belangrijk: [],
   meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2 },

@@ -102,7 +102,15 @@ p, h1, h2 { margin: 0; }
 }
 .hud .warm { color: var(--warm); }
 .links { grid-column: 1; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.kamer { grid-column: 3; grid-row: 2; align-self: center; }
+.links, .rechts { min-height: 0; }
+/* Rechts kan meer blokken hebben dan er passen: dan scrolt de kolom, met een zachte rand boven en onder. */
+.rechts {
+  grid-column: 3; grid-row: 2; align-self: stretch; display: flex; flex-direction: column; justify-content: safe center; gap: 24px; min-width: 0;
+  overflow-y: auto; pointer-events: auto; margin: 0 -16px; padding: 16px; scrollbar-width: none;
+  mask-image: linear-gradient(transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+.rechts::-webkit-scrollbar { display: none; }
+@media (min-width: 1001px) { .app:not(.overzicht) .stage { height: 100vh; } }
 .mail { grid-column: 1; grid-row: 3; align-self: end; }
 .voordeur { grid-column: 3; grid-row: 3; align-self: end; }
 .midden-onder { grid-column: 2; grid-row: 3; justify-self: center; align-self: end; display: flex; flex-direction: column; align-items: center; gap: 14px; pointer-events: auto; }
@@ -174,7 +182,7 @@ p, h1, h2 { margin: 0; }
 /* Overzicht: alle blokken in een raster */
 .app.overzicht .stage { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto; align-content: start; pointer-events: auto; }
 .app.overzicht .stage > * { grid-column: auto; grid-row: auto; align-self: stretch; }
-.app.overzicht .links { display: contents; }
+.app.overzicht .links, .app.overzicht .rechts { display: contents; }
 .app.overzicht .klok { align-self: start; justify-self: start; }
 .app.overzicht .midden-onder { grid-column: 1 / -1; order: 10; padding-top: 8px; }
 @media (max-width: 1300px) and (min-width: 1001px) { .app.overzicht .stage { grid-template-columns: repeat(2, minmax(0, 1fr)); } .app.overzicht .hud { display: none; } }
@@ -185,6 +193,30 @@ p, h1, h2 { margin: 0; }
 .inst-datum + .inst-datum { margin-top: 8px; }
 .inst-label { margin: 4px 0 0; font-size: 13px; color: var(--gedempt); }
 .segment.inst-chips { flex-wrap: wrap; border-radius: 22px; }
+
+#tandwiel { position: relative; }
+#tandwiel.nieuw::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--warm); box-shadow: 0 0 8px var(--warm); }
+.inst-code { display: block; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.5; word-break: break-all; user-select: all; }
+
+/* App-blokken */
+.app-link { color: var(--ijs); text-decoration: none; }
+.app-link:hover { color: var(--ijs-licht); }
+.app-beelden { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.app-beeld { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.app-beeld img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; background: rgba(255,255,255,0.05); }
+.app-beeld figcaption { color: var(--gedempt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-rij { display: flex; gap: 12px; align-items: center; }
+.media-rij > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.media-rij strong { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poster { width: 44px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; flex: none; background: rgba(255,255,255,0.05); }
+.posters { display: flex; gap: 8px; }
+.posters .poster { width: calc((100% - 32px) / 5); }
+.tegels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tegel { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.05); }
+.tegel-getal { font-size: 22px; color: var(--ijs); }
+.tegel.warm .tegel-getal { color: var(--warm); }
+.download { display: flex; flex-direction: column; gap: 6px; }
+.download-titel { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* Meldingen in beeld */
 .toasts { position: fixed; right: 36px; bottom: 36px; z-index: 20; display: flex; flex-direction: column; gap: 12px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
@@ -275,7 +307,7 @@ a.mailregel:hover strong { color: var(--ijs-licht); }
   .gebouw { scale: 0.62; }
   .hud { align-items: flex-start; }
   .voorbeeld { position: static; transform: none; text-align: center; padding: 8px 16px 20px; }
-  .links { display: contents; }
+  .links, .rechts { display: contents; }
   .app.huis-achter .huis, .app.overzicht .huis { display: none; }
   .app.overzicht .stage { display: flex; }
   .inst-datum { grid-template-columns: 1fr 1fr; }

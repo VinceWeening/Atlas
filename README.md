@@ -60,6 +60,18 @@ Atlas kijkt elke vijf seconden of Frigate iets nieuws heeft gezien en stuurt een
 
 Windows-meldingen werken vanaf deze versie van de Windows-app; installeer de nieuwe installer uit GitHub Actions eenmalig opnieuw. De app haalt meldingen op via een `http://`-adres (zoals via Tailscale). Staat het venster open en vooraan, dan verschijnt de melding in Atlas zelf.
 
+## Blokken voor je server-apps
+
+Atlas zoekt Frigate, Jellyfin, Seerr, Sonarr en Radarr zelf op hun standaardpoort (5000, 8096, 5055, 8989 en 7878). Frigate staat standaard aan, de rest zet je aan in het tandwiel onder **Blokken**. Zonder sleutel ziet Atlas alleen of de app draait en kun je hem openen; met een sleutel komt de inhoud in het blok:
+
+| Blok | Variabele | Waar vind je de sleutel | Wat je dan ziet |
+| --- | --- | --- | --- |
+| Jellyfin | `JELLYFIN_KEY` | Dashboard › API-sleutels › + | Verder kijken en nieuw toegevoegd |
+| Seerr | `SEERR_KEY` | Instellingen › Algemeen › API-sleutel | Wachtende en lopende aanvragen |
+| Downloads | `SONARR_KEY`, `RADARR_KEY` | Settings › General › API Key | Wat er nu downloadt, met voortgang |
+
+Vul de sleutels in bij de app Atlas in ZimaOS. Draait een app op een andere poort of machine, vul dan het adres in, bijvoorbeeld `JELLYFIN_URL`, `JELLYSEERR_URL`, `SONARR_URL` of `RADARR_URL`.
+
 ## Google Agenda en Gmail koppelen
 
 Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor maak je eenmalig een eigen, gratis koppeling in Google Cloud. Er gaat niets via een externe dienst.
