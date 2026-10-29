@@ -209,7 +209,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     };
 
     if (!opties.frigate.ingesteld)
-      sectie.append(maak('p', 'muted klein', 'Frigate is nog niet ingesteld. Vul FRIGATE_URL in bij de app Atlas in ZimaOS, bijvoorbeeld http://192.168.1.76:5000. De stappen staan in de README.'));
+      sectie.append(maak('p', 'muted klein', 'Atlas zoekt Frigate op poort 5000 van je server, maar heeft hem nog niet gevonden. Staat Frigate op een ander adres, vul dan FRIGATE_URL in bij de app Atlas in ZimaOS.'));
     else if (!opties.frigate.bereikbaar) sectie.append(maak('p', 'klein warm', 'Frigate reageert niet. Klopt FRIGATE_URL, en staat poort 5000 open?'));
 
     sectie.append(

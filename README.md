@@ -51,7 +51,7 @@ Lampen verschijnen in de kamer waaraan ze in Home Assistant zijn toegewezen. De 
 
 Atlas kijkt elke vijf seconden of Frigate iets nieuws heeft gezien en stuurt een melding naar je pc, je telefoon of allebei.
 
-1. Vul bij de app Atlas in ZimaOS `FRIGATE_URL` in: het adres van Frigate met poort **5000**, bijvoorbeeld `http://192.168.1.10:5000`. Poort 5000 is de interne poort zonder inlog; staat die niet open, zet hem dan open in de instellingen van de app Frigate.
+1. Atlas zoekt Frigate zelf op poort 5000: als container `frigate`, op de server waar Atlas draait en op de machine van Home Assistant. Vindt Atlas hem niet (het tandwiel zegt het dan), vul dan bij de app Atlas in ZimaOS `FRIGATE_URL` in, bijvoorbeeld `http://192.168.1.10:5000`. Poort 5000 is de interne poort zonder inlog.
 2. Open het tandwiel in Atlas. Onder **Meldingen** kies je:
    - **Pc**: een Windows-melding via de Atlas-app, ook als het venster in het systeemvak staat.
    - **Telefoon**: een melding via de Home Assistant-app. Kies je telefoon in de lijst; daar staat elke telefoon met de Home Assistant-app die aan Home Assistant gekoppeld is.

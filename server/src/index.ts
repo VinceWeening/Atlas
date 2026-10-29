@@ -29,7 +29,6 @@ app.log.info(ha ? `Home Assistant op ${ha.url}` : 'Geen HA_URL en HA_TOKEN inges
 const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-z0-9_]+$`).test(waarde) ? waarde : null);
 
 const meldingen = Meldingen.uitOmgeving(huis, app.log);
-app.log.info(meldingen.ingesteld ? 'Frigate ingesteld, meldingen staan aan.' : 'Geen FRIGATE_URL ingesteld, er komen geen meldingen.');
 
 const google = Google.uitOmgeving();
 app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');

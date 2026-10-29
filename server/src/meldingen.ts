@@ -56,24 +56,60 @@ export class Meldingen {
   private eersteRonde = true;
   bereikbaar = false;
 
-  constructor(
-    private readonly frigate: string | null,
-    private readonly telefoon: Telefoon,
-    private readonly log: { warn: (bericht: unknown) => void },
-  ) {}
+  private frigate: string | null;
+  private gezocht = 0;
 
-  static uitOmgeving(telefoon: Telefoon, log: { warn: (bericht: unknown) => void }) {
-    const frigate = process.env.FRIGATE_URL?.trim().replace(/\/+$/, '') || null;
-    const meldingen = new Meldingen(frigate, telefoon, log);
-    if (frigate) {
-      meldingen.kijk();
-      setInterval(() => meldingen.kijk(), 5000);
+  constructor(
+    /** Vast adres uit FRIGATE_URL, of adressen om Frigate zelf te zoeken. */
+    private readonly adressen: string[],
+    private readonly telefoon: Telefoon,
+    private readonly log: { info: (bericht: string) => void; warn: (bericht: unknown) => void },
+  ) {
+    this.frigate = adressen.length === 1 ? adressen[0] : null;
+  }
+
+  /**
+   * Met FRIGATE_URL gebruikt Atlas dat adres. Zonder zoekt Atlas Frigate zelf op de standaardpoort 5000: als container
+   * met de naam frigate, op de server zelf, en op de machine van Home Assistant.
+   */
+  static uitOmgeving(telefoon: Telefoon, log: { info: (bericht: string) => void; warn: (bericht: unknown) => void }) {
+    const vast = process.env.FRIGATE_URL?.trim().replace(/\/+$/, '');
+    let adressen = vast ? [vast] : ['http://frigate:5000', 'http://host.docker.internal:5000', 'http://172.17.0.1:5000'];
+    if (!vast) {
+      try {
+        const ha = new URL(process.env.HA_URL ?? '');
+        adressen.push(`http://${ha.hostname}:5000`);
+      } catch {
+        // Geen HA_URL, dan alleen de standaardplekken.
+      }
+      adressen = [...new Set(adressen)];
     }
+    const meldingen = new Meldingen(adressen, telefoon, log);
+    meldingen.kijk();
+    setInterval(() => meldingen.kijk(), 5000);
     return meldingen;
   }
 
   get ingesteld() {
     return !!this.frigate;
+  }
+
+  /** Probeert de adressen een voor een; Frigate antwoordt op /api/version met zijn versienummer. */
+  private async zoek() {
+    if (Date.now() - this.gezocht < 60_000) return;
+    this.gezocht = Date.now();
+    for (const adres of this.adressen) {
+      try {
+        const antwoord = await fetch(`${adres}/api/version`, { signal: AbortSignal.timeout(3000) });
+        if (antwoord.ok && /^\d+\.\d+/.test((await antwoord.text()).trim())) {
+          this.frigate = adres;
+          this.log.info(`Frigate gevonden op ${adres}`);
+          return;
+        }
+      } catch {
+        // Niet hier, volgende proberen.
+      }
+    }
   }
 
   /** Meldingen na een bepaald volgnummer; zonder nummer de laatste tien. */
@@ -107,6 +143,8 @@ export class Meldingen {
   }
 
   private async kijk() {
+    if (!this.frigate) await this.zoek();
+    if (!this.frigate) return;
     try {
       const adres = `${this.frigate}/api/events?limit=50&after=${Math.floor(this.laatsteStart - 60)}`;
       const antwoord = await fetch(adres, { signal: AbortSignal.timeout(8000) });
