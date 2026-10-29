@@ -231,7 +231,7 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   function teken() {
     filters.querySelectorAll<HTMLButtonElement>('button').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.filter === staat.filter)));
     if (!staat.data) {
-      lijst.replaceChildren(maak('p', 'muted', staat.fout ? 'Home Assistant is niet bereikbaar.' : 'Laden…'));
+      lijst.replaceChildren(...(staat.fout ? [maak('p', 'muted', 'Home Assistant is niet bereikbaar.')] : [maak('div', 'gl laden-kaart'), maak('div', 'gl laden-kaart'), maak('div', 'gl laden-kaart')]));
       return;
     }
     const overig = staat.data.overig;

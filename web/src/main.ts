@@ -4,6 +4,7 @@ import { instellingen, type Instellingen } from './instellingen';
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { maakApparaten, maakCameras } from './paginas';
 import { meldFout, post } from './melding';
+import { begroeting, startGlans } from './glans';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -82,7 +83,7 @@ const datumFormaat = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: '
 function tikKlok() {
   const nu = new Date();
   tekst($('tijd'), nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }));
-  tekst($('datum'), datumFormaat.format(nu));
+  tekst($('datum'), `${begroeting()} · ${datumFormaat.format(nu)}`);
   const deel = (nu.getHours() * 60 + nu.getMinutes()) / 1440;
   $('dagboog').setAttribute('stroke-dasharray', `${Math.round(478 * deel)} 478`);
 }
@@ -277,7 +278,7 @@ function tekenKamer() {
   const lijst = $('lampen');
   const lampen = los ? (huis?.losseLampen ?? []) : (kamer?.lampen ?? []);
   if (!huis) {
-    lijst.replaceChildren(maak('p', 'muted', staat.huisFout ? 'Home Assistant is niet bereikbaar.' : 'Lampen laden…'));
+    lijst.replaceChildren(...(staat.huisFout ? [maak('p', 'muted', 'Home Assistant is niet bereikbaar.')] : [maak('div', 'laden'), maak('div', 'laden')]));
   } else if (!kamer && !los) {
     lijst.replaceChildren(maak('p', 'muted', 'Deze ruimte is nog niet gekoppeld aan een ruimte in Home Assistant.'));
   } else if (lampen.length === 0) {
@@ -294,6 +295,8 @@ function tekenHud() {
   const lampen = huis ? [...huis.kamers.flatMap((k) => k.lampen), ...huis.losseLampen] : [];
   const camera = huis?.cameras[0];
   const aan = lampen.filter((l) => l.aan).length;
+  // Hoe meer lampen aan, hoe warmer de gloed onder het huis.
+  document.querySelector<HTMLElement>('.app')!.style.setProperty('--licht', String(lampen.length ? aan / lampen.length : 0));
   $('hud').replaceChildren(
     ...(huis?.binnen != null ? [maak('span', 'hud-chip mono', `${huis.binnen.toLocaleString('nl-NL', { maximumFractionDigits: 1 })}° binnen`)] : []),
     ...(lampen.length ? [maak('span', 'hud-chip mono' + (aan ? ' warm' : ''), `${aan}/${lampen.length} lampen`)] : []),
@@ -489,7 +492,7 @@ function tekenCamera(verversen = false) {
     if (cameraGetoond !== camera.id) laatsteBeeld = null;
     cameraGetoond = camera.id;
     beeld.alt = `Camerabeeld ${camera.naam}`;
-    beeld.src = `/api/camera/${encodeURIComponent(camera.id)}?t=${Date.now()}`;
+    laadBeeld(`/api/camera/${encodeURIComponent(camera.id)}?t=${Date.now()}`);
   }
   const beweging = $('beweging');
   beweging.parentElement!.hidden = !camera?.beweging;
@@ -539,6 +542,8 @@ function zetBlokken(overzicht: boolean) {
   if (!overzicht) $('plek-dock').append($('dock'));
 }
 
+let wisselKlaar: ReturnType<typeof setTimeout> | undefined;
+
 // Schermen en blokken uit het tandwiel.
 function pasToe() {
   const blokken = staat.inst?.blokken ?? {};
@@ -549,6 +554,15 @@ function pasToe() {
   const achter = overzicht || pagina || (huisUit && !staat.huisVoor);
   const app = document.querySelector('.app')!;
   if (app.classList.contains('overzicht') !== overzicht) zetBlokken(overzicht);
+  // Bij een ander scherm komen de panelen kort na elkaar zacht binnen.
+  if (app.getAttribute('data-scherm') !== staat.scherm) {
+    app.setAttribute('data-scherm', staat.scherm);
+    app.classList.remove('wissel');
+    void (app as HTMLElement).offsetWidth;
+    app.classList.add('wissel');
+    clearTimeout(wisselKlaar);
+    wisselKlaar = setTimeout(() => app.classList.remove('wissel'), 1200);
+  }
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
   $('pagina-apparaten').hidden = staat.scherm !== 'apparaten';
@@ -1010,22 +1024,36 @@ $('camera-wissel').addEventListener('click', () => {
   staat.camera += 1;
   tekenCamera();
 });
-$<HTMLImageElement>('camera-beeld').addEventListener('load', (e) => {
-  (e.target as HTMLImageElement).hidden = false;
-  laatsteBeeld = Date.now();
-  $('camera-leeg').hidden = true;
-});
-// Lukt een nieuw beeld niet, dan blijft het vorige staan met de tijd erbij; is er nog nooit een beeld geweest, dan een
-// rustige tekst in plaats van een leeg vlak.
-$<HTMLImageElement>('camera-beeld').addEventListener('error', (e) => {
-  const beeld = e.target as HTMLImageElement;
+/**
+ * Een nieuw camerabeeld eerst buiten beeld laden en pas wisselen als het binnen is, zodat het beeld niet knippert.
+ * Lukt het niet, dan blijft het vorige staan met de tijd erbij; is er nog nooit een beeld geweest, dan een rustige tekst
+ * in plaats van een leeg vlak.
+ */
+let gevraagd = '';
+function laadBeeld(adres: string) {
+  gevraagd = adres;
+  const voorlader = new Image();
+  voorlader.addEventListener('load', () => {
+    // Intussen naar een andere camera gewisseld: dit beeld is niet meer nodig.
+    if (adres !== gevraagd) return;
+    const beeld = $<HTMLImageElement>('camera-beeld');
+    beeld.src = adres;
+    beeld.hidden = false;
+    laatsteBeeld = Date.now();
+    $('camera-leeg').hidden = true;
+  });
+  voorlader.addEventListener('error', () => adres === gevraagd && beeldMislukt());
+  voorlader.src = adres;
+}
+function beeldMislukt() {
+  const beeld = $<HTMLImageElement>('camera-beeld');
   const leeg = $('camera-leeg');
   leeg.hidden = false;
   if (laatsteBeeld == null) {
     beeld.hidden = true;
     tekst(leeg, 'Geen beeld van deze camera');
   } else tekst(leeg, `Laatste beeld ${new Date(laatsteBeeld).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`);
-});
+}
 
 // Sneltoetsen: 1 t/m 4 voor de schermen, pijltjes voor de verdiepingen op Thuis. Uit te zetten in het tandwiel.
 const SCHERMEN: Scherm[] = ['thuis', 'overzicht', 'apparaten', 'cameras'];
@@ -1062,6 +1090,7 @@ $('huis-knop').addEventListener('click', () => {
   pasToe();
 });
 
+startGlans();
 instellingen({ google: laadOverzicht, opgeslagen: (inst) => zetInst(inst) });
 pasToe();
 tekenBelangrijk();

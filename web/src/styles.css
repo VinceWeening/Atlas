@@ -560,3 +560,133 @@ a.mailregel:hover strong { color: var(--ijs-licht); }
   .toasts { right: 16px; bottom: 96px; }
   .inst-datum { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Afwerking ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* Fijne korrel over alles, zoals bij matglas: haalt het digitale vlakke weg. */
+.app::after {
+  content: ""; position: fixed; inset: 0; z-index: 30; pointer-events: none; opacity: 0.05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23k)'/%3E%3C/svg%3E");
+}
+/* Zachte vignet aan de randen, zodat het oog naar het midden gaat. */
+.app::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,0.45) 100%);
+}
+
+/* Sfeer per dagdeel: een fractie warmer in de ochtend en avond, kouder en donkerder in de nacht. */
+.app { --sfeer: rgba(120, 150, 255, 0.13); --sfeer-warm: rgba(255, 170, 90, 0.08); }
+.app[data-dagdeel="ochtend"] { --sfeer: rgba(255, 196, 140, 0.12); --sfeer-warm: rgba(255, 170, 90, 0.10); }
+.app[data-dagdeel="avond"] { --sfeer: rgba(150, 120, 255, 0.13); --sfeer-warm: rgba(255, 150, 80, 0.11); }
+.app[data-dagdeel="nacht"] { --sfeer: rgba(90, 120, 220, 0.09); --sfeer-warm: rgba(255, 170, 90, 0.04); }
+.app {
+  background:
+    radial-gradient(50% 45% at 50% 52%, #172030 0%, rgba(23, 32, 48, 0) 100%),
+    radial-gradient(40% 35% at 92% 6%, var(--sfeer) 0%, transparent 70%),
+    radial-gradient(35% 35% at 6% 96%, var(--sfeer-warm) 0%, transparent 70%),
+    var(--grond);
+  transition: background 2s ease;
+}
+
+/* Gloed onder het huis: ijsblauw, en warmer naarmate er meer lampen aan zijn. */
+.huis::before {
+  background:
+    radial-gradient(closest-side, rgba(255, 180, 100, calc(0.22 * var(--licht, 0))), transparent),
+    radial-gradient(closest-side, rgba(111, 168, 255, 0.16), transparent);
+  transition: background 1.2s ease;
+}
+/* Contactschaduw: het huis staat ergens op in plaats van te zweven. */
+.gebouw::after {
+  content: ""; position: absolute; left: -20%; right: -20%; bottom: -60px; height: 120px; transform: translateZ(-2px);
+  background: radial-gradient(closest-side, rgba(0,0,0,0.55), transparent); pointer-events: none;
+}
+
+/* Glans: de glasrand licht op waar je muis is, met een heel zacht schijnsel binnenin. */
+.gl {
+  background:
+    radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), rgba(214, 237, 255, 0.0), transparent 70%),
+    linear-gradient(140deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 28%, rgba(255,255,255,0.03) 62%, rgba(255,255,255,0.20) 100%);
+  transition: box-shadow 400ms ease;
+}
+.gl.glans {
+  background:
+    radial-gradient(220px circle at var(--mx) var(--my), rgba(214, 237, 255, 0.55), transparent 70%),
+    linear-gradient(140deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 28%, rgba(255,255,255,0.03) 62%, rgba(255,255,255,0.20) 100%);
+}
+.gl > .gl-in { position: relative; isolation: isolate; }
+.gl > .gl-in::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 400ms ease;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0), rgba(168, 216, 255, 0.07), transparent 60%);
+}
+.gl.glans > .gl-in::before { opacity: 1; }
+/* Glas iets rijker: een dunne lichtlijn bovenin en een diepere, zachtere schaduw. */
+.gl-in {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035) 0%, transparent 18%),
+    linear-gradient(180deg, rgba(30,36,48,0.58) 0%, rgba(14,17,24,0.52) 100%);
+}
+.gl { box-shadow: 0 40px 80px -24px rgba(0,0,0,0.8), 0 10px 24px -10px rgba(0,0,0,0.55), 0 0 0 0.5px rgba(0,0,0,0.6); }
+
+/* Binnenkomen: bij een ander scherm schuiven de panelen kort na elkaar zacht omhoog. */
+@keyframes binnen { from { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(2px); } }
+.app.wissel :is(.links, .rechts, .kolom, .ruimte-kaarten, .camera-raster) > :is(section, .gl),
+.app.wissel :is(.midden-onder, .pagina-kop, .kolom-kop) { animation: binnen 700ms var(--zacht-uit) both; }
+.app.wissel :is(.links, .rechts, .kolom, .ruimte-kaarten, .camera-raster) > :nth-child(2) { animation-delay: 60ms; }
+.app.wissel :is(.links, .rechts, .kolom, .ruimte-kaarten, .camera-raster) > :nth-child(3) { animation-delay: 120ms; }
+.app.wissel :is(.links, .rechts, .kolom, .ruimte-kaarten, .camera-raster) > :nth-child(4) { animation-delay: 180ms; }
+.app.wissel :is(.links, .rechts, .kolom, .ruimte-kaarten, .camera-raster) > :nth-child(n+5) { animation-delay: 240ms; }
+.app.wissel #kolom-huis > * { animation-delay: 80ms; }
+.app.wissel #kolom-media > * { animation-delay: 160ms; }
+.app.wissel .midden-onder { animation-delay: 200ms; }
+@keyframes oplichten { from { opacity: 0; } }
+.app.wissel .huis .gebouw { animation: oplichten 900ms ease both; }
+
+/* Schakelaar met een veertje: de knop schiet net iets door, en wordt breder als je hem indrukt, zoals op iOS. */
+.schakelaar::after {
+  background: linear-gradient(180deg, #FFFFFF, #E9EDF3);
+  transition: transform 420ms cubic-bezier(.3, 1.45, .5, 1), width 200ms ease;
+}
+.schakelaar:active:not(:disabled)::after { width: 32px; }
+.schakelaar[aria-checked="true"]:active:not(:disabled)::after { transform: translateX(14px); }
+.schakelaar.warm[aria-checked="true"] { box-shadow: 0 0 18px -4px rgba(242, 166, 90, 0.7); }
+.schakelaar[aria-checked="true"]:not(.warm) { box-shadow: 0 0 18px -6px rgba(127, 184, 238, 0.7); }
+
+/* Dock: een brandende lamp gloeit van binnenuit. */
+.dock-knop.aan { box-shadow: inset 0 0 0 1px rgba(255, 201, 138, 0.18), inset 0 -10px 24px -12px rgba(255, 201, 138, 0.35); }
+
+/* Klok: dunner en rustiger, cijfers die niet verspringen. */
+.tijd { font-weight: 200; letter-spacing: -0.04em; }
+.tijd, .kamer-temp, .hud-chip { font-feature-settings: "tnum" 1; }
+.kamer-naam, .kolom-kop { text-wrap: balance; }
+
+/* Laden: zachte glanzende balkjes in plaats van "Laden…". */
+@keyframes glim { to { background-position: -200% 0; } }
+.laden {
+  height: 14px; border-radius: var(--r-pil); margin: 6px 0;
+  background: linear-gradient(90deg, var(--vlak-1) 0%, var(--vlak-3) 50%, var(--vlak-1) 100%) 0 0 / 200% 100%;
+  animation: glim 1.6s ease-in-out infinite;
+}
+.laden.kort { width: 60%; }
+.laden-kaart { height: 220px; margin-bottom: var(--gat); break-inside: avoid; display: block; opacity: 0.6; }
+.lampen > .laden { height: 40px; border-radius: var(--r-rij); border: 0; }
+
+/* Camerabeeld wisselt zonder te knipperen en krijgt een zachte binnenrand. */
+.camera::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 -60px 60px -40px rgba(0,0,0,0.6); }
+.camera img { transition: opacity 400ms ease; }
+
+/* Vensters openen met een kleine zoom en een backdrop die langzaam vervaagt. */
+@keyframes venster { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes achter { from { opacity: 0; } }
+dialog[open] { animation: venster 420ms var(--zacht-uit); }
+dialog[open]::backdrop { animation: achter 420ms ease; }
+.kamer-menu:popover-open { animation: venster 280ms var(--zacht-uit); }
+
+/* Meldingen veren binnen. */
+.toast { animation: toast-in 520ms cubic-bezier(.3, 1.35, .5, 1); }
+
+/* Dunne, rustige scrollbalken waar wel gescrold wordt. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+}
