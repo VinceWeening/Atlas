@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Google } from './google.js';
 import { HomeAssistant, haInstellingen } from './ha.js';
+import { instellingen, zetInstellingen } from './instellingen.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,14 @@ app.get('/api/overzicht', async () => {
     mailAantal: post.status === 'fulfilled' ? post.value.aantal : 0,
     mailFout: post.status === 'rejected',
   };
+});
+
+app.get('/api/instellingen', async () => instellingen());
+
+app.put('/api/instellingen', async (request, reply) => {
+  const fout = zetInstellingen(request.body);
+  if (fout) return reply.code(400).send({ fout });
+  return instellingen();
 });
 
 app.get('/api/google', async () => {

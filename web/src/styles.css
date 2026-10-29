@@ -101,7 +101,7 @@ p, h1, h2 { margin: 0; }
   pointer-events: auto;
 }
 .hud .warm { color: var(--warm); }
-.vandaag { grid-column: 1; grid-row: 2; align-self: center; }
+.links { grid-column: 1; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .kamer { grid-column: 3; grid-row: 2; align-self: center; }
 .mail { grid-column: 1; grid-row: 3; align-self: end; }
 .voordeur { grid-column: 3; grid-row: 3; align-self: end; }
@@ -154,17 +154,47 @@ p, h1, h2 { margin: 0; }
   background: rgba(255,255,255,0.06); color: var(--tekst); font: inherit; font-size: 13px;
 }
 .kamer-keuze option { background: #11151C; color: #F4F6FA; }
-[hidden] { display: none !important; }
+[hidden], .uit { display: none !important; }
+
+/* Belangrijke data */
+#belangrijk { display: flex; flex-direction: column; gap: 14px; }
+.datum-rij { display: flex; flex-direction: column; gap: 6px; }
+.datum-rij .kop strong { font-size: 15px; font-weight: 500; }
+.datum-rij .mono { font-size: 13px; color: var(--ijs); white-space: nowrap; }
+.datum-rij.dringend .mono { color: var(--warm); }
+.balk { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.balk > span { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #6FA8FF, var(--ijs-licht)); }
+
+/* Huis op de achtergrond (uitgezet in het tandwiel, of op het Overzicht) */
+.huis { transition: opacity 600ms ease, filter 600ms ease; }
+.app.huis-achter .huis { opacity: 0.12; filter: blur(1.5px) saturate(0.6); pointer-events: none; }
+.app.huis-achter .huis-bediening { display: none; }
+#huis-knop { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Overzicht: alle blokken in een raster */
+.app.overzicht .stage { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto; align-content: start; pointer-events: auto; }
+.app.overzicht .stage > * { grid-column: auto; grid-row: auto; align-self: stretch; }
+.app.overzicht .links { display: contents; }
+.app.overzicht .klok { align-self: start; justify-self: start; }
+.app.overzicht .midden-onder { grid-column: 1 / -1; order: 10; padding-top: 8px; }
+@media (max-width: 1300px) and (min-width: 1001px) { .app.overzicht .stage { grid-template-columns: repeat(2, minmax(0, 1fr)); } .app.overzicht .hud { display: none; } }
+
+/* Belangrijke data bewerken */
+.inst-datum { display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px 44px; gap: 8px; align-items: center; }
+.inst-datum input[type="date"] { flex: none; width: 100%; padding: 0 10px; color-scheme: dark; }
+.inst-datum + .inst-datum { margin-top: 8px; }
+.segment.inst-keuze { justify-content: flex-start; padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.05); align-self: flex-start; }
 a.mailregel { color: inherit; text-decoration: none; border-radius: 8px; }
 a.mailregel:hover strong { color: var(--ijs-licht); }
 
 /* Instellingen */
 .instellingen {
-  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; margin: auto;
+  width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; margin: auto;
   color: var(--tekst); border: 0; overflow: auto;
 }
 .instellingen::backdrop { background: rgba(4,6,10,0.6); backdrop-filter: blur(6px); }
 .inst-sectie { display: flex; flex-direction: column; gap: 12px; }
+.inst-sectie + .inst-sectie, #instellingen-inhoud > div > .inst-sectie { margin-top: 28px; }
 .inst-stappen { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--gedempt); }
 .inst-rij { display: flex; gap: 8px; }
 .inst-veld {
@@ -233,4 +263,9 @@ a.mailregel:hover strong { color: var(--ijs-licht); }
   .gebouw { scale: 0.62; }
   .hud { align-items: flex-start; }
   .voorbeeld { position: static; transform: none; text-align: center; padding: 8px 16px 20px; }
+  .links { display: contents; }
+  .app.huis-achter .huis, .app.overzicht .huis { display: none; }
+  .app.overzicht .stage { display: flex; }
+  .inst-datum { grid-template-columns: 1fr 1fr; }
+  .inst-datum input[type="date"] { width: 100%; }
 }

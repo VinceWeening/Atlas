@@ -28,10 +28,17 @@
     </div></section>
 
     <div class="midden-boven">
-      <span class="lbl">ATLAS · THUIS</span>
+      <span class="lbl" id="scherm-label">ATLAS · THUIS</span>
       <div class="knoppen">
-        <div class="gl pil"><div class="gl-in segment" id="verdiepingen"></div></div>
         <div class="gl pil"><div class="gl-in segment">
+          <button type="button" data-scherm="thuis">Thuis</button>
+          <button type="button" data-scherm="overzicht">Overzicht</button>
+        </div></div>
+        <div class="gl pil" id="huis-knop-pil" hidden><div class="gl-in segment">
+          <button type="button" id="huis-knop" aria-pressed="false"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg><span class="huis-knop-tekst">Huis</span></button>
+        </div></div>
+        <div class="gl pil huis-bediening"><div class="gl-in segment" id="verdiepingen"></div></div>
+        <div class="gl pil huis-bediening"><div class="gl-in segment">
           <button type="button" data-modus="2d">2D</button>
           <button type="button" data-modus="3d">3D</button>
         </div></div>
@@ -41,21 +48,28 @@
       </div>
     </div>
 
-    <div class="hud" id="hud"></div>
+    <div class="hud" id="hud" data-blok="hud"></div>
 
-    <section class="gl vandaag" aria-label="Vandaag"><div class="gl-in paneel">
+    <div class="links">
+    <section class="gl vandaag" aria-label="Vandaag" data-blok="vandaag"><div class="gl-in paneel">
       <div class="kop"><h2 class="lbl">VANDAAG</h2><span class="mono muted klein" id="aantal-afspraken"></span></div>
       <div id="agenda"></div>
       <p class="muted klein morgen" id="morgen"></p>
     </div></section>
 
-    <section class="gl kamer" aria-label="Kamer"><div class="gl-in paneel">
+    <section class="gl belangrijk" aria-label="Belangrijk" data-blok="belangrijk"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">BELANGRIJK</h2></div>
+      <div id="belangrijk"></div>
+    </div></section>
+    </div>
+
+    <section class="gl kamer" aria-label="Kamer" data-blok="kamer"><div class="gl-in paneel">
       <div class="kop"><span class="lbl" id="kamer-label">KAMER</span><select class="kamer-keuze" id="kamer-keuze" aria-label="Kies een ruimte" hidden></select></div>
       <div class="kop"><p class="kamer-naam" id="kamer-naam"></p><p class="mono kamer-temp" id="kamer-temp"></p></div>
       <div id="lampen"></div>
     </div></section>
 
-    <section class="gl mail" aria-label="Mail"><div class="gl-in paneel">
+    <section class="gl mail" aria-label="Mail" data-blok="mail"><div class="gl-in paneel">
       <div class="kop"><h2 class="lbl">MAIL</h2><span class="mono muted klein" id="mail-aantal"></span></div>
       <div id="mail"></div>
     </div></section>
@@ -63,10 +77,10 @@
     <div class="midden-onder">
       <button type="button" class="orb" aria-label="Spraak, komt in fase 3"></button>
       <span class="lbl zacht">"HEY ATLAS" · FASE 3</span>
-      <div class="gl pil" id="scenes-pil" hidden><div class="gl-in segment scenes" id="scenes"></div></div>
+      <div class="gl pil" id="scenes-pil" data-blok="scenes" hidden><div class="gl-in segment scenes" id="scenes"></div></div>
     </div>
 
-    <section class="gl voordeur" aria-label="Camera"><div class="gl-in paneel">
+    <section class="gl voordeur" aria-label="Camera" data-blok="camera"><div class="gl-in paneel">
       <div class="kop"><h2 class="lbl">CAMERA</h2><button type="button" class="camera-wissel mono klein" id="camera-wissel" hidden></button></div>
       <div class="camera">
         <img id="camera-beeld" alt="" hidden>

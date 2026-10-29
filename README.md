@@ -66,6 +66,14 @@ Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor
 
 Daarna kies je in het tandwiel welke agenda's Atlas laat zien. De koppeling staat in het volume `atlas-data`, dus een update van Atlas laat hem staan.
 
+## Het tandwiel
+
+- **Blokken**: zet elk blok aan of uit, ook het huis. Staat het huis uit, dan gaat het naar de achtergrond; met de knop "Huis" bovenin haal je het weer naar voren.
+- **Startscherm**: kies per apparaat tussen Thuis (huis met blokken eromheen) en Overzicht (alleen blokken in een raster). Standaard is dat Thuis op de pc en Overzicht op de telefoon.
+- **Belangrijke data**: deadlines (alleen een datum) en periodes (van en t/m, met voortgangsbalk). Ze staan in het blok Belangrijk.
+
+Alles wordt op de server bewaard in het volume `atlas-data`, dus pc en telefoon laten hetzelfde zien.
+
 ## Zelf ontwikkelen
 
 ```bash
