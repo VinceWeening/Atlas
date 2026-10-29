@@ -33,6 +33,8 @@
         <div class="gl pil"><div class="gl-in segment">
           <button type="button" data-scherm="thuis">Thuis</button>
           <button type="button" data-scherm="overzicht">Overzicht</button>
+          <button type="button" data-scherm="apparaten">Apparaten</button>
+          <button type="button" data-scherm="cameras">Camera's</button>
         </div></div>
         <div class="gl pil" id="huis-knop-pil" hidden><div class="gl-in segment">
           <button type="button" id="huis-knop" aria-pressed="false"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg><span class="huis-knop-tekst">Huis</span></button>
@@ -63,11 +65,30 @@
     </div></section>
     </div>
 
+    <div class="rechts">
     <section class="gl kamer" aria-label="Kamer" data-blok="kamer"><div class="gl-in paneel">
       <div class="kop"><span class="lbl" id="kamer-label">KAMER</span><select class="kamer-keuze" id="kamer-keuze" aria-label="Kies een ruimte" hidden></select></div>
       <div class="kop"><p class="kamer-naam" id="kamer-naam"></p><p class="mono kamer-temp" id="kamer-temp"></p></div>
       <div id="lampen"></div>
     </div></section>
+
+    <section class="gl app-blok" aria-label="Frigate" data-blok="frigate"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">FRIGATE</h2><a class="mono klein app-link" data-app-link="frigate" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+      <div id="app-frigate"><p class="muted klein">Laden…</p></div>
+    </div></section>
+    <section class="gl app-blok" aria-label="Jellyfin" data-blok="jellyfin"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">JELLYFIN</h2><a class="mono klein app-link" data-app-link="jellyfin" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+      <div id="app-jellyfin"><p class="muted klein">Laden…</p></div>
+    </div></section>
+    <section class="gl app-blok" aria-label="Seerr" data-blok="seerr"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">SEERR</h2><a class="mono klein app-link" data-app-link="seerr" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+      <div id="app-seerr"><p class="muted klein">Laden…</p></div>
+    </div></section>
+    <section class="gl app-blok" aria-label="Downloads" data-blok="downloads"><div class="gl-in paneel">
+      <div class="kop"><h2 class="lbl">DOWNLOADS</h2><a class="mono klein app-link" data-app-link="downloads" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+      <div id="app-downloads"><p class="muted klein">Laden…</p></div>
+    </div></section>
+    </div>
 
     <section class="gl mail" aria-label="Mail" data-blok="mail"><div class="gl-in paneel">
       <div class="kop"><h2 class="lbl">MAIL</h2><span class="mono muted klein" id="mail-aantal"></span></div>
@@ -88,7 +109,24 @@
         <span class="lbl zacht hoek" id="camera-naam">camera</span>
       </div>
     </div></section>
+
+    <section class="pagina" id="pagina-apparaten" aria-label="Apparaten" hidden>
+      <div class="pagina-kop">
+        <input class="inst-veld pagina-zoek" id="apparaten-zoek" type="search" placeholder="Zoek een apparaat of ruimte" aria-label="Zoek een apparaat of ruimte">
+        <div class="gl pil"><div class="gl-in segment inst-chips" id="apparaten-filters"></div></div>
+      </div>
+      <div class="ruimte-kaarten" id="apparaten-lijst"></div>
+    </section>
+
+    <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
+      <div class="camera-raster" id="cameras-lijst"></div>
+    </section>
   </div>
+
+  <dialog class="gl instellingen camera-groot" id="camera-groot" aria-labelledby="camera-groot-naam"><div class="gl-in paneel">
+    <div class="kop"><h2 class="kamer-naam" id="camera-groot-naam"></h2><button type="button" class="knop zacht" id="camera-groot-sluit">Sluiten</button></div>
+    <img id="camera-groot-beeld" alt="">
+  </div></dialog>
 
   <dialog class="gl instellingen" id="instellingen" aria-labelledby="instellingen-titel"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="instellingen-titel">Instellingen</h2><button type="button" class="knop zacht" id="instellingen-sluit">Sluiten</button></div>

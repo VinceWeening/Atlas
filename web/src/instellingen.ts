@@ -48,6 +48,9 @@ async function stuur(adres: string, methode: string, body?: unknown) {
   return data;
 }
 
+const BIJWERKEN =
+  'sudo docker pull ghcr.io/vinceweening/atlas:latest && cd "$(sudo docker inspect atlas --format \'{{ index .Config.Labels "com.docker.compose.project.working_dir" }}\')" && sudo docker compose up -d';
+
 const BLOKNAMEN: [string, string][] = [
   ['huis', 'Huis (plattegrond)'],
   ['vandaag', 'Vandaag'],
@@ -57,6 +60,10 @@ const BLOKNAMEN: [string, string][] = [
   ['camera', 'Camera'],
   ['scenes', 'Scènes'],
   ['hud', 'Statusregel boven'],
+  ['frigate', 'Frigate'],
+  ['jellyfin', 'Jellyfin'],
+  ['seerr', 'Seerr (aanvragen)'],
+  ['downloads', 'Downloads (Sonarr en Radarr)'],
 ];
 
 function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>) {
@@ -209,7 +216,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     };
 
     if (!opties.frigate.ingesteld)
-      sectie.append(maak('p', 'muted klein', 'Frigate is nog niet ingesteld. Vul FRIGATE_URL in bij de app Atlas in ZimaOS, bijvoorbeeld http://192.168.1.76:5000. De stappen staan in de README.'));
+      sectie.append(maak('p', 'muted klein', 'Atlas zoekt Frigate op poort 5000 van je server, maar heeft hem nog niet gevonden. Staat Frigate op een ander adres, vul dan FRIGATE_URL in bij de app Atlas in ZimaOS.'));
     else if (!opties.frigate.bereikbaar) sectie.append(maak('p', 'klein warm', 'Frigate reageert niet. Klopt FRIGATE_URL, en staat poort 5000 open?'));
 
     sectie.append(
@@ -278,9 +285,43 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     return sectie;
   }
 
+  async function tekenVersie() {
+    const sectie = maak('section', 'inst-sectie');
+    sectie.append(maak('h3', 'lbl', 'ATLAS BIJWERKEN'));
+    let v: { huidig: string; nieuwste: string | null; nieuw: boolean };
+    try {
+      v = await (await fetch('/api/versie')).json();
+    } catch {
+      return sectie;
+    }
+    sectie.append(
+      maak(
+        'p',
+        v.nieuw ? 'klein warm' : 'muted klein',
+        v.nieuw ? `Er staat een nieuwe versie klaar (${v.nieuwste}). Je hebt nu ${v.huidig}.` : `Je hebt de nieuwste versie (${v.huidig}).`,
+      ),
+    );
+    if (v.nieuw) {
+      sectie.append(maak('p', 'muted klein', 'Plak dit in de terminal van ZimaOS. Je instellingen blijven bewaard.'));
+      const opdracht = maak('code', 'inst-code', BIJWERKEN);
+      const kopieer = knop('Kopiëren', 'knop zacht');
+      kopieer.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(BIJWERKEN);
+          kopieer.textContent = 'Gekopieerd';
+        } catch {
+          getSelection()?.selectAllChildren(opdracht);
+        }
+      });
+      sectie.append(opdracht, kopieer);
+    }
+    return sectie;
+  }
+
   async function teken() {
     const google = maak('div');
-    inhoud.replaceChildren(...(await tekenAlgemeen()), google);
+    const [algemeen, versie] = await Promise.all([tekenAlgemeen(), tekenVersie()]);
+    inhoud.replaceChildren(...(versie.childElementCount > 2 ? [versie] : []), ...algemeen, google, ...(versie.childElementCount > 2 ? [] : [versie]));
     await tekenGoogle(google);
   }
 

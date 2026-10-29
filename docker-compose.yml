@@ -9,6 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "8790:8790"
+    # Zodat Atlas Frigate en andere apps op dezelfde server kan vinden.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Hier bewaart Atlas de Google-koppeling en je instellingen.
       - atlas-data:/app/data
@@ -22,8 +25,13 @@ services:
       # Google-koppeling (zie README): de client-ID en het clientgeheim van je eigen OAuth-client.
       GOOGLE_CLIENT_ID: ""
       GOOGLE_CLIENT_SECRET: ""
-      # Meldingen (zie README): het adres van Frigate, bijvoorbeeld http://192.168.1.10:5000.
+      # Meldingen (zie README): Atlas zoekt Frigate zelf. Alleen invullen als dat niet lukt, bijvoorbeeld http://192.168.1.10:5000.
       FRIGATE_URL: ""
+      # App-blokken (zie README): Atlas vindt de apps zelf, maar voor de inhoud is per app een API-sleutel nodig.
+      JELLYFIN_KEY: ""
+      SEERR_KEY: ""
+      SONARR_KEY: ""
+      RADARR_KEY: ""
 
 volumes:
   atlas-data:
