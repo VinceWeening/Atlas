@@ -33,6 +33,8 @@
         <div class="gl pil"><div class="gl-in segment">
           <button type="button" data-scherm="thuis">Thuis</button>
           <button type="button" data-scherm="overzicht">Overzicht</button>
+          <button type="button" data-scherm="apparaten">Apparaten</button>
+          <button type="button" data-scherm="cameras">Camera's</button>
         </div></div>
         <div class="gl pil" id="huis-knop-pil" hidden><div class="gl-in segment">
           <button type="button" id="huis-knop" aria-pressed="false"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg><span class="huis-knop-tekst">Huis</span></button>
@@ -107,7 +109,24 @@
         <span class="lbl zacht hoek" id="camera-naam">camera</span>
       </div>
     </div></section>
+
+    <section class="pagina" id="pagina-apparaten" aria-label="Apparaten" hidden>
+      <div class="pagina-kop">
+        <input class="inst-veld pagina-zoek" id="apparaten-zoek" type="search" placeholder="Zoek een apparaat of ruimte" aria-label="Zoek een apparaat of ruimte">
+        <div class="gl pil"><div class="gl-in segment inst-chips" id="apparaten-filters"></div></div>
+      </div>
+      <div class="ruimte-kaarten" id="apparaten-lijst"></div>
+    </section>
+
+    <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
+      <div class="camera-raster" id="cameras-lijst"></div>
+    </section>
   </div>
+
+  <dialog class="gl instellingen camera-groot" id="camera-groot" aria-labelledby="camera-groot-naam"><div class="gl-in paneel">
+    <div class="kop"><h2 class="kamer-naam" id="camera-groot-naam"></h2><button type="button" class="knop zacht" id="camera-groot-sluit">Sluiten</button></div>
+    <img id="camera-groot-beeld" alt="">
+  </div></dialog>
 
   <dialog class="gl instellingen" id="instellingen" aria-labelledby="instellingen-titel"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="instellingen-titel">Instellingen</h2><button type="button" class="knop zacht" id="instellingen-sluit">Sluiten</button></div>

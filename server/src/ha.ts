@@ -6,6 +6,24 @@ export type Kamer = { id: string; naam: string; verdieping: string | null; tempe
 export type Camera = { id: string; naam: string; kamer: string | null; beweging: string | null };
 export type Scene = { id: string; naam: string };
 export type Toestel = { id: string; naam: string };
+export type Apparaat = {
+  id: string;
+  naam: string;
+  soort: string;
+  /** De stand in gewone taal, bijvoorbeeld "21,5 °C" of "Open". */
+  tekst: string;
+  /** Aan of uit bij iets dat je kunt schakelen; anders null. */
+  aan: boolean | null;
+  /** Wat de knop doet: schakelen (aan/uit), starten (scène of script) of niets. */
+  bediening: 'schakel' | 'start' | null;
+  bereikbaar: boolean;
+};
+export type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
+
+/** Soorten die op het scherm Apparaten komen, in deze volgorde. Camera's hebben een eigen scherm. */
+const SOORTEN = ['light', 'switch', 'fan', 'cover', 'climate', 'media_player', 'vacuum', 'lock', 'input_boolean', 'scene', 'script', 'sensor', 'binary_sensor', 'person', 'weather'];
+/** Wat Atlas mag bedienen. Sloten bewust niet: die alleen bekijken. */
+export const BEDIENBAAR = ['light', 'switch', 'fan', 'input_boolean', 'media_player', 'cover', 'scene', 'script'];
 export type Huis = {
   bron: 'home-assistant' | 'voorbeeld';
   kamers: Kamer[];
@@ -37,6 +55,89 @@ export function haInstellingen(): HaInstellingen | null {
 // Ruimtes en verdiepingen komen uit het register van Home Assistant. Dat kan alleen via een sjabloon,
 // omdat de REST-API geen eigen adres voor ruimtes heeft.
 const ruimteSjabloon = `{% set ns = namespace(r=[]) %}{% for a in areas() %}{% set e = namespace(l=area_entities(a)) %}{% for d in area_devices(a) %}{% set e.l = e.l + device_entities(d) %}{% endfor %}{% set ns.r = ns.r + [{'id': a, 'naam': area_name(a), 'verdieping': (floor_name(floor_id(a)) if floor_id is defined and floor_id(a) else none), 'entiteiten': e.l | unique | list}] %}{% endfor %}{{ ns.r | tojson }}`;
+
+const getal = (w: unknown, unit?: unknown) => {
+  const n = Number(w);
+  if (!Number.isFinite(n)) return String(w);
+  const tekst = n.toLocaleString('nl-NL', { maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 1 });
+  return unit ? `${tekst} ${unit}` : tekst;
+};
+
+const binairNamen: Record<string, [string, string]> = {
+  door: ['Open', 'Dicht'],
+  window: ['Open', 'Dicht'],
+  opening: ['Open', 'Dicht'],
+  garage_door: ['Open', 'Dicht'],
+  motion: ['Beweging', 'Geen beweging'],
+  occupancy: ['Bezet', 'Vrij'],
+  presence: ['Aanwezig', 'Afwezig'],
+  moisture: ['Nat', 'Droog'],
+  smoke: ['Rook!', 'Geen rook'],
+  battery: ['Batterij laag', 'Batterij goed'],
+  connectivity: ['Verbonden', 'Niet verbonden'],
+  plug: ['Ingeplugd', 'Uitgeplugd'],
+};
+
+const staatNamen: Record<string, string> = {
+  on: 'Aan',
+  off: 'Uit',
+  open: 'Open',
+  closed: 'Dicht',
+  opening: 'Gaat open',
+  closing: 'Gaat dicht',
+  playing: 'Speelt',
+  paused: 'Gepauzeerd',
+  idle: 'Inactief',
+  standby: 'Stand-by',
+  locked: 'Op slot',
+  unlocked: 'Niet op slot',
+  home: 'Thuis',
+  not_home: 'Weg',
+  docked: 'In station',
+  cleaning: 'Zuigt',
+  returning: 'Gaat terug',
+  heat: 'Verwarmen',
+  cool: 'Koelen',
+  auto: 'Automatisch',
+  unknown: '–',
+  unavailable: 'Niet bereikbaar',
+};
+
+function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
+  const soort = t.entity_id.split('.')[0];
+  const a = t.attributes;
+  let naam = a.friendly_name ?? t.entity_id;
+  // "Woonkamer Staande lamp" in de ruimte Woonkamer heet gewoon "Staande lamp".
+  if (ruimte && naam.toLowerCase().startsWith(`${ruimte.toLowerCase()} `) && naam.length > ruimte.length + 1)
+    naam = naam.slice(ruimte.length + 1).replace(/^\w/, (l) => l.toUpperCase());
+  const bereikbaar = t.state !== 'unavailable';
+  let tekst = staatNamen[t.state] ?? t.state;
+  if (bereikbaar && t.state !== 'unknown') {
+    if (soort === 'sensor') tekst = getal(t.state, a.unit_of_measurement);
+    else if (soort === 'binary_sensor') {
+      const namen = binairNamen[String(a.device_class)];
+      if (namen) tekst = namen[t.state === 'on' ? 0 : 1];
+    } else if (soort === 'light' && t.state === 'on' && typeof a.brightness === 'number') tekst = `Aan · ${Math.round((a.brightness / 255) * 100)}%`;
+    else if (soort === 'cover' && typeof a.current_position === 'number') tekst = a.current_position === 0 ? 'Dicht' : `${a.current_position}% open`;
+    else if (soort === 'climate') {
+      const nu = a.current_temperature != null ? getal(a.current_temperature, '°C') : null;
+      const doel = a.temperature != null ? getal(a.temperature, '°C') : null;
+      tekst = [nu, doel && `naar ${doel}`].filter(Boolean).join(' ') || tekst;
+    } else if (soort === 'media_player' && t.state === 'playing' && typeof a.media_title === 'string') tekst = `Speelt · ${a.media_title}`;
+    else if (soort === 'weather') tekst = `${weerNamen[t.state] ?? t.state}${typeof a.temperature === 'number' ? ` · ${getal(a.temperature, '°C')}` : ''}`;
+  }
+  if (soort === 'scene' || soort === 'script') tekst = bereikbaar ? '' : tekst;
+  const schakelbaar = ['light', 'switch', 'fan', 'input_boolean', 'media_player', 'cover'].includes(soort);
+  return {
+    id: t.entity_id,
+    naam,
+    soort,
+    tekst,
+    aan: schakelbaar ? !['off', 'closed', 'unavailable', 'unknown', 'standby'].includes(t.state) : null,
+    bediening: schakelbaar ? 'schakel' : soort === 'scene' || soort === 'script' ? 'start' : null,
+    bereikbaar,
+  };
+}
 
 const weerNamen: Record<string, string> = {
   'clear-night': 'Helder',
@@ -151,6 +252,41 @@ export class HomeAssistant {
     const binnen = binnenTemps.length ? Math.round((binnenTemps.reduce((a, b) => a + b, 0) / binnenTemps.length) * 10) / 10 : null;
 
     return { bron: 'home-assistant', kamers, losseLampen, cameras, scenes, weer, binnen };
+  }
+
+  /** Alles uit Home Assistant dat ertoe doet, per ruimte. */
+  async apparaten(): Promise<Apparaten> {
+    const [toestanden, ruimtes] = await Promise.all([
+      this.vraag('/api/states').then((a) => a.json() as Promise<Toestand[]>),
+      this.haalRuimtes().catch(() => [] as Ruimte[]),
+    ]);
+    const getoond = (t: Toestand) => SOORTEN.includes(t.entity_id.split('.')[0]);
+    const volgorde = (a: Apparaat, b: Apparaat) => SOORTEN.indexOf(a.soort) - SOORTEN.indexOf(b.soort) || a.naam.localeCompare(b.naam, 'nl');
+    const perId = new Map(toestanden.map((t) => [t.entity_id, t]));
+    const ingedeeld = new Set<string>();
+    const lijst = ruimtes
+      .map((r) => {
+        const apparaten = r.entiteiten
+          .map((e) => perId.get(e))
+          .filter((t): t is Toestand => !!t && getoond(t))
+          .map((t) => {
+            ingedeeld.add(t.entity_id);
+            return alsApparaat(t, r.naam);
+          })
+          .sort(volgorde);
+        return { id: r.id, naam: r.naam, verdieping: r.verdieping, apparaten };
+      })
+      .filter((r) => r.apparaten.length);
+    const overig = toestanden.filter((t) => getoond(t) && !ingedeeld.has(t.entity_id)).map((t) => alsApparaat(t)).sort(volgorde);
+    return { ruimtes: lijst, overig };
+  }
+
+  /** Schakelt of start een apparaat. Alleen soorten uit BEDIENBAAR komen hier. */
+  async bedien(entiteit: string, aan: boolean) {
+    const soort = entiteit.split('.')[0];
+    const dienst =
+      soort === 'scene' || soort === 'script' ? 'turn_on' : soort === 'cover' ? (aan ? 'open_cover' : 'close_cover') : aan ? 'turn_on' : 'turn_off';
+    await this.vraag(`/api/services/${soort}/${dienst}`, { method: 'POST', body: JSON.stringify({ entity_id: entiteit }) });
   }
 
   async bestaat(entiteit: string) {

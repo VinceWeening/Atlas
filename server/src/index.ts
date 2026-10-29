@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Google } from './google.js';
-import { HomeAssistant, haInstellingen } from './ha.js';
+import { BEDIENBAAR, HomeAssistant, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
 import { Apps } from './apps.js';
@@ -130,6 +130,23 @@ app.get<{ Params: { id: string } }>('/api/apps/jellyfin/beeld/:id', async (reque
   const beeld = await apps.jellyfinBeeld(request.params.id).catch(() => null);
   if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
   return reply.header('cache-control', 'max-age=86400').type(beeld.type).send(beeld.data);
+});
+
+app.get('/api/apparaten', async (_request, reply) => {
+  try {
+    return await huis.apparaten();
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id', async (request, reply) => {
+  const id = entiteit(`(?:${BEDIENBAAR.join('|')})`, request.params.id);
+  if (!id || typeof request.body?.aan !== 'boolean') return reply.code(400).send({ fout: 'Dit apparaat kan Atlas niet bedienen' });
+  if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Apparaat niet gevonden' });
+  await huis.bedien(id, request.body.aan);
+  return { ok: true };
 });
 
 app.get('/api/huis', async (_request, reply) => {

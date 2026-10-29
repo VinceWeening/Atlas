@@ -1,6 +1,7 @@
 import './styles.css';
 import { lagen, type Ruimte } from './huis';
 import { instellingen, type Instellingen } from './instellingen';
+import { maakApparaten, maakCameras } from './paginas';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -13,7 +14,7 @@ type Overzicht = {
   mailFout?: boolean;
   google?: { ingesteld: boolean; gekoppeld: boolean };
 };
-type Scherm = Instellingen['start']['breed'];
+type Scherm = Instellingen['start']['breed'] | 'apparaten' | 'cameras';
 type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
 type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 type Huis = {
@@ -323,17 +324,34 @@ function pasToe() {
   const blokken = staat.inst?.blokken ?? {};
   document.querySelectorAll<HTMLElement>('[data-blok]').forEach((el) => el.classList.toggle('uit', blokken[el.dataset.blok!] === false));
   const overzicht = staat.scherm === 'overzicht';
+  const pagina = staat.scherm === 'apparaten' || staat.scherm === 'cameras';
   const huisUit = blokken.huis === false;
-  const achter = overzicht || (huisUit && !staat.huisVoor);
+  const achter = overzicht || pagina || (huisUit && !staat.huisVoor);
   const app = document.querySelector('.app')!;
   app.classList.toggle('overzicht', overzicht);
+  app.classList.toggle('op-pagina', pagina);
+  $('pagina-apparaten').hidden = staat.scherm !== 'apparaten';
+  $('pagina-cameras').hidden = staat.scherm !== 'cameras';
+  if (staat.scherm === 'apparaten') apparaten.laad();
+  if (staat.scherm === 'cameras') {
+    cameraScherm.zet(staat.huis?.cameras ?? []);
+    cameraScherm.ververs();
+  }
   app.classList.toggle('huis-achter', achter);
-  $('huis-knop-pil').hidden = !achter && !(huisUit && staat.huisVoor);
+  $('huis-knop-pil').hidden = pagina || (!achter && !(huisUit && staat.huisVoor));
   $('huis-knop').setAttribute('aria-pressed', String(!achter));
   $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
-  tekst($('scherm-label'), overzicht ? 'ATLAS · OVERZICHT' : 'ATLAS · THUIS');
+  tekst($('scherm-label'), `ATLAS · ${{ thuis: 'THUIS', overzicht: 'OVERZICHT', apparaten: 'APPARATEN', cameras: "CAMERA'S" }[staat.scherm]}`);
   document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.scherm === staat.scherm)));
 }
+
+const apparaten = maakApparaten(() => laadHuis());
+const cameraScherm = maakCameras();
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (staat.scherm === 'apparaten') apparaten.laad();
+  if (staat.scherm === 'cameras') cameraScherm.ververs();
+}, 5_000);
 
 const dag = 86_400_000;
 const middag = (iso: string) => new Date(`${iso}T12:00:00`).getTime();
@@ -680,6 +698,7 @@ async function laadHuis() {
     staat.huisFout = true;
   }
   tekenAlles();
+  if (staat.scherm === 'cameras') cameraScherm.zet(staat.huis?.cameras ?? []);
 }
 
 document.querySelectorAll<HTMLButtonElement>('[data-modus]').forEach((knop) => {
@@ -709,7 +728,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((knop) => 
   });
 });
 $('huis-knop').addEventListener('click', () => {
-  if (staat.scherm === 'overzicht') {
+  if (staat.scherm !== 'thuis') {
     staat.scherm = 'thuis';
     staat.huisVoor = true;
   } else staat.huisVoor = !staat.huisVoor;

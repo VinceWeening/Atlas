@@ -1,4 +1,4 @@
-import type { Huis } from './ha.js';
+import type { Apparaat, Apparaten, Huis } from './ha.js';
 
 // Voorbeeldgegevens. Agenda en mail blijven voorbeeld tot de Google-koppeling er is;
 // het huis gebruikt dit alleen als er geen Home Assistant is ingesteld.
@@ -58,6 +58,35 @@ export class VoorbeeldHuis {
   }
 
   async scene(_entiteit: string) {}
+
+  async apparaten(): Promise<Apparaten> {
+    const alsApparaat = (l: { id: string; naam: string; aan: boolean; helderheid: number | null }): Apparaat => ({
+      id: l.id,
+      naam: l.naam,
+      soort: 'light',
+      tekst: l.aan ? `Aan · ${l.helderheid ?? 100}%` : 'Uit',
+      aan: l.aan,
+      bediening: 'schakel',
+      bereikbaar: true,
+    });
+    const sensor = (id: string, naam: string, tekst: string): Apparaat => ({ id, naam, soort: 'sensor', tekst, aan: null, bediening: null, bereikbaar: true });
+    return {
+      ruimtes: this.staat.kamers.map((k) => ({
+        id: k.id,
+        naam: k.naam,
+        verdieping: k.verdieping,
+        apparaten: [
+          ...k.lampen.map(alsApparaat),
+          ...(k.temperatuur != null ? [sensor(`sensor.${k.id}_temperatuur`, 'Temperatuur', `${k.temperatuur.toLocaleString('nl-NL')} °C`)] : []),
+        ],
+      })),
+      overig: this.staat.scenes.map((s) => ({ id: s.id, naam: s.naam, soort: 'scene', tekst: '', aan: null, bediening: 'start', bereikbaar: true })),
+    };
+  }
+
+  async bedien(entiteit: string, aan: boolean) {
+    await this.lamp(entiteit, aan);
+  }
 
   async cameraBeeld(_entiteit: string): Promise<{ type: string; data: Buffer } | null> {
     return null;
