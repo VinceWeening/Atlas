@@ -1,14 +1,32 @@
 // Het tandwiel: blokken aan/uit, startscherm, belangrijke data en de Google-koppeling.
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
-export type Meldingen = { pc: boolean; telefoon: boolean; toestel: string | null; soorten: string[]; camerasUit: string[]; wachttijd: number };
+export type Meldingen = {
+  pc: boolean;
+  telefoon: boolean;
+  toestel: string | null;
+  soorten: string[];
+  camerasUit: string[];
+  wachttijd: number;
+  zones: string[];
+  bekenden: string[];
+};
 export type Instellingen = {
   blokken: Record<string, boolean>;
   start: { breed: Scherm; smal: Scherm };
   belangrijk: Datum[];
   meldingen: Meldingen;
+  favorieten: string[];
+  snelkoppelingen: string[];
 };
-type Opties = { frigate: { ingesteld: boolean; bereikbaar: boolean }; cameras: string[]; toestellen: { id: string; naam: string }[]; soorten: string[] };
+type Opties = {
+  frigate: { ingesteld: boolean; bereikbaar: boolean };
+  cameras: string[];
+  toestellen: { id: string; naam: string }[];
+  soorten: string[];
+  zones: string[];
+  gezichten: string[];
+};
 
 const SOORTNAMEN: Record<string, string> = {
   person: 'Personen',
@@ -57,6 +75,7 @@ const BLOKNAMEN: [string, string][] = [
   ['belangrijk', 'Belangrijk'],
   ['mail', 'Mail'],
   ['kamer', 'Kamer en lampen'],
+  ['favorieten', 'Favorieten'],
   ['camera', 'Camera'],
   ['scenes', 'Scènes'],
   ['hud', 'Statusregel boven'],
@@ -103,7 +122,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     try {
       inst = await (await fetch('/api/instellingen')).json();
     } catch {
-      return [maak('p', 'muted', 'De server is niet bereikbaar.')];
+      return null;
     }
 
     const blokken = maak('section', 'inst-sectie');
@@ -111,8 +130,10 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       maak('h3', 'lbl', 'BLOKKEN'),
       maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren.'),
     );
+    const raster = maak('div', 'inst-raster');
     for (const [id, naam] of BLOKNAMEN)
-      blokken.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
+      raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
+    blokken.append(raster);
 
     const start = maak('section', 'inst-sectie');
     start.append(maak('h3', 'lbl', 'STARTSCHERM'));
@@ -188,7 +209,57 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     rij.append(toevoegen, opslaan);
     data.append(regels, rij, melding);
 
-    return [blokken, start, data, await tekenMeldingen(inst, (nieuw) => (inst = nieuw))];
+    return {
+      scherm: [blokken, start],
+      data: [data],
+      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw))],
+      knoppen: [await tekenSnelkoppelingen(inst)],
+    };
+  }
+
+  /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de pijl-knop bij Apparaten. */
+  async function tekenSnelkoppelingen(inst: Instellingen) {
+    const sectie = maak('section', 'inst-sectie');
+    sectie.append(maak('h3', 'lbl', 'KNOPPEN ONDERIN'));
+    let namen = new Map<string, string>();
+    try {
+      const data = (await (await fetch('/api/apparaten')).json()) as { ruimtes: { apparaten: { id: string; naam: string }[] }[]; overig: { id: string; naam: string }[] };
+      namen = new Map([...data.ruimtes.flatMap((r) => r.apparaten), ...data.overig].map((a) => [a.id, a.naam]));
+    } catch {
+      // Dan de technische namen.
+    }
+    const lijst = maak('div');
+    const teken = () => {
+      const ids = inst.snelkoppelingen;
+      if (!ids.length) {
+        lijst.replaceChildren(maak('p', 'muted klein', 'Nu staan alle scènes onderin. Kies zelf knoppen met de pijl-knop bij een lamp, schakelaar of scène in Apparaten.'));
+        return;
+      }
+      lijst.replaceChildren(
+        ...ids.map((id, i) => {
+          const rij = maak('div', 'lamp');
+          rij.append(maak('div', 'lamp-info', namen.get(id) ?? id));
+          const knoppen = maak('div', 'inst-rij');
+          const zet = async (nieuw: string[]) => {
+            inst = await bewaar({ snelkoppelingen: nieuw });
+            teken();
+          };
+          const omhoog = knop('↑', 'knop zacht');
+          omhoog.setAttribute('aria-label', `${namen.get(id) ?? id} naar links`);
+          omhoog.disabled = i === 0;
+          omhoog.addEventListener('click', () => zet(ids.map((x, j) => (j === i - 1 ? id : j === i ? ids[i - 1] : x))));
+          const weg = knop('×', 'knop zacht');
+          weg.setAttribute('aria-label', `${namen.get(id) ?? id} weghalen`);
+          weg.addEventListener('click', () => zet(ids.filter((x) => x !== id)));
+          knoppen.append(omhoog, weg);
+          rij.append(knoppen);
+          return rij;
+        }),
+      );
+    };
+    teken();
+    sectie.append(lijst);
+    return sectie;
   }
 
   async function tekenMeldingen(inst: Instellingen, zet: (inst: Instellingen) => void) {
@@ -258,6 +329,47 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
         );
     }
 
+    if (opties.zones.length) {
+      sectie.append(
+        maak('p', 'inst-label', 'Alleen in deze zones'),
+        maak('p', 'muted klein', 'Kies je zones bij een camera, dan krijg je alleen een melding als iemand daarin komt (bijvoorbeeld de oprit en niet de stoep).'),
+      );
+      for (const zone of opties.zones) {
+        const [camera, naam] = zone.split('/');
+        sectie.append(
+          schakelaarRij(`${cameraNaam(camera)} · ${cameraNaam(naam)}`, m().zones.includes(zone), (aan) =>
+            bewaarM({ zones: aan ? [...m().zones, zone] : m().zones.filter((z) => z !== zone) }),
+          ),
+        );
+      }
+    }
+
+    sectie.append(maak('p', 'inst-label', 'Gezichtsherkenning'));
+    if (opties.gezichten.length) {
+      sectie.append(maak('p', 'muted klein', 'Herkent Frigate iemand, dan staat de naam in de melding. Wie je hier aanzet, geeft geen melding, bijvoorbeeld als je zelf thuiskomt.'));
+      for (const naam of opties.gezichten)
+        sectie.append(
+          schakelaarRij(`Geen melding voor ${naam}`, m().bekenden.some((b) => b.toLowerCase() === naam.toLowerCase()), (aan) =>
+            bewaarM({ bekenden: aan ? [...m().bekenden, naam] : m().bekenden.filter((b) => b.toLowerCase() !== naam.toLowerCase()) }),
+          ),
+        );
+    } else
+      sectie.append(
+        maak(
+          'p',
+          'muted klein',
+          'Nog geen gezichten gevonden. Zet in Frigate (0.16 of nieuwer) face_recognition aan en voeg in de Face Library een paar foto’s per persoon toe. Daarna verschijnen de namen hier.',
+        ),
+      );
+
+    sectie.append(
+      maak(
+        'p',
+        'muted klein',
+        'Wil je dat Frigate fietsen en auto’s helemaal niet meer volgt? Zet in de Frigate-config onder objects › track alleen person (en eventueel dog of cat).',
+      ),
+    );
+
     const wachtRij = maak('div', 'lamp');
     const wacht = maak('select', 'kamer-keuze');
     wacht.setAttribute('aria-label', 'Stilte na een melding');
@@ -318,10 +430,71 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     return sectie;
   }
 
+  // Tabbladen in plaats van één lange lijst. Het laatst gekozen tabblad blijft open bij de volgende keer.
+  const TABS = [
+    ['scherm', 'Scherm'],
+    ['data', 'Data'],
+    ['meldingen', 'Meldingen'],
+    ['knoppen', 'Knoppen'],
+    ['koppelingen', 'Koppelingen'],
+  ] as const;
+  type Tab = (typeof TABS)[number][0];
+  let tab: Tab = 'scherm';
+  try {
+    const bewaard = localStorage.getItem('atlas-inst-tab');
+    if (TABS.some(([id]) => id === bewaard)) tab = bewaard as Tab;
+  } catch {
+    // Geen opslag in de browser, dan begint het bij Scherm.
+  }
+
   async function teken() {
     const google = maak('div');
-    const [algemeen, versie] = await Promise.all([tekenAlgemeen(), tekenVersie()]);
-    inhoud.replaceChildren(...(versie.childElementCount > 2 ? [versie] : []), ...algemeen, google, ...(versie.childElementCount > 2 ? [] : [versie]));
+    const [delen, versie] = await Promise.all([tekenAlgemeen(), tekenVersie()]);
+    if (!delen) {
+      inhoud.replaceChildren(maak('p', 'muted', 'De server is niet bereikbaar.'));
+      return;
+    }
+    const nieuw = versie.childElementCount > 2;
+    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [google, ...(nieuw ? [] : [versie])] };
+    const balk = maak('div', 'inst-tabs');
+    balk.setAttribute('role', 'tablist');
+    balk.setAttribute('aria-label', 'Onderdelen van de instellingen');
+    const vak = maak('div', 'inst-paneel');
+    vak.setAttribute('role', 'tabpanel');
+    const knoppen = TABS.map(([id, naam]) => {
+      const k = knop(naam, 'inst-tab');
+      k.setAttribute('role', 'tab');
+      k.id = `inst-tab-${id}`;
+      k.addEventListener('click', () => kies(id));
+      k.addEventListener('keydown', (e) => {
+        const stap = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!stap) return;
+        const volgende = TABS[(TABS.findIndex(([t]) => t === id) + stap + TABS.length) % TABS.length][0];
+        kies(volgende);
+        document.getElementById(`inst-tab-${volgende}`)?.focus();
+      });
+      return k;
+    });
+    function kies(id: Tab) {
+      tab = id;
+      try {
+        localStorage.setItem('atlas-inst-tab', id);
+      } catch {
+        // Niet erg.
+      }
+      knoppen.forEach((k, i) => {
+        const gekozen = TABS[i][0] === id;
+        k.setAttribute('aria-selected', String(gekozen));
+        k.tabIndex = gekozen ? 0 : -1;
+      });
+      vak.setAttribute('aria-labelledby', `inst-tab-${id}`);
+      vak.replaceChildren(...panelen[id]);
+      vak.scrollTop = 0;
+    }
+    balk.append(...knoppen);
+    // Staat er een nieuwe versie klaar, dan staat die bovenaan, los van de tabbladen.
+    inhoud.replaceChildren(...(nieuw ? [versie] : []), balk, vak);
+    kies(tab);
     await tekenGoogle(google);
   }
 

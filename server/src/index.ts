@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { Readable } from 'node:stream';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
@@ -105,11 +106,13 @@ app.get<{ Querystring: { na?: string } }>('/api/meldingen', async (request) => {
 });
 
 app.get('/api/meldingen/opties', async () => {
-  const [cameras, toestellen] = await Promise.allSettled([meldingen.frigateCameras(), huis.toestellen()]);
+  const [cameras, toestellen, details] = await Promise.allSettled([meldingen.frigateCameras(), huis.toestellen(), meldingen.frigateDetails()]);
   return {
     frigate: { ingesteld: meldingen.ingesteld, bereikbaar: cameras.status === 'fulfilled' && meldingen.ingesteld },
     cameras: cameras.status === 'fulfilled' ? cameras.value : [],
     toestellen: toestellen.status === 'fulfilled' ? toestellen.value : [],
+    zones: details.status === 'fulfilled' ? details.value.zones : [],
+    gezichten: details.status === 'fulfilled' ? details.value.gezichten : [],
     soorten: SOORTEN,
   };
 });
@@ -120,6 +123,24 @@ app.get<{ Params: { camera: string } }>('/api/meldingen/camera/:camera/beeld', a
   const beeld = await meldingen.cameraBeeld(request.params.camera).catch(() => null);
   if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
   return reply.header('cache-control', 'no-store').type(beeld.type).send(beeld.data);
+});
+
+app.get('/api/opnames', async (_request, reply) => {
+  try {
+    return await meldingen.opnames();
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Frigate is niet bereikbaar' });
+  }
+});
+
+app.get<{ Params: { id: string } }>('/api/meldingen/:id/video', async (request, reply) => {
+  const video = await meldingen.video(request.params.id, request.headers.range).catch(() => null);
+  if (!video) return reply.code(404).send({ fout: 'Geen opname' });
+  reply.code(video.status);
+  for (const kop of ['content-type', 'content-length', 'content-range', 'accept-ranges'])
+    if (video.headers.get(kop)) reply.header(kop, video.headers.get(kop)!);
+  return reply.send(Readable.fromWeb(video.body as import('node:stream/web').ReadableStream));
 });
 
 app.get<{ Params: { id: string } }>('/api/meldingen/:id/beeld', async (request, reply) => {
@@ -164,11 +185,48 @@ app.get('/api/huis', async (_request, reply) => {
   }
 });
 
-app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/lamp/:id', async (request, reply) => {
+// Lamp aan of uit ({aan}), dimmen ({helderheid: 1-100}) of warmer/koeler wit ({kelvin}).
+app.post<{ Params: { id: string }; Body: { aan?: unknown; helderheid?: unknown; kelvin?: unknown } }>('/api/lamp/:id', async (request, reply) => {
   const id = entiteit('light', request.params.id);
-  if (!id || typeof request.body?.aan !== 'boolean') return reply.code(400).send({ fout: 'Onbekende lamp of opdracht' });
+  const { aan, helderheid, kelvin } = request.body ?? {};
+  const geldig =
+    (aan === undefined || typeof aan === 'boolean') &&
+    (helderheid === undefined || (Number.isInteger(helderheid) && (helderheid as number) >= 1 && (helderheid as number) <= 100)) &&
+    (kelvin === undefined || (Number.isInteger(kelvin) && (kelvin as number) >= 1000 && (kelvin as number) <= 10000)) &&
+    (aan !== undefined || helderheid !== undefined || kelvin !== undefined);
+  if (!id || !geldig) return reply.code(400).send({ fout: 'Onbekende lamp of opdracht' });
   if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Lamp niet gevonden' });
-  await huis.lamp(id, request.body.aan);
+  await huis.lamp(id, { aan: aan as boolean | undefined, helderheid: helderheid as number | undefined, kelvin: kelvin as number | undefined });
+  return { ok: true };
+});
+
+app.get<{ Params: { id: string } }>('/api/camera/:id/opties', async (request, reply) => {
+  const id = entiteit('camera', request.params.id);
+  if (!id) return reply.code(404).send({ fout: 'Camera niet gevonden' });
+  try {
+    return { opties: await huis.cameraOpties(id) };
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+// Eén instelling van een camera zetten. Alleen wat bij die camera hoort, en alleen geldige waarden.
+app.post<{ Params: { id: string; optie: string }; Body: { waarde?: unknown } }>('/api/camera/:id/opties/:optie', async (request, reply) => {
+  const id = entiteit('camera', request.params.id);
+  const optie = id ? (await huis.cameraOpties(id)).find((o) => o.id === request.params.optie) : undefined;
+  if (!optie) return reply.code(404).send({ fout: 'Deze instelling hoort niet bij de camera' });
+  const w = request.body?.waarde;
+  const geldig =
+    optie.soort === 'button'
+      ? true
+      : optie.soort === 'select'
+        ? typeof w === 'string' && !!optie.keuzes?.includes(w)
+        : optie.soort === 'number'
+          ? typeof w === 'number' && Number.isFinite(w) && w >= optie.min! && w <= optie.max!
+          : typeof w === 'boolean';
+  if (!geldig) return reply.code(400).send({ fout: 'Ongeldige waarde' });
+  await huis.cameraOptie(optie, (w ?? null) as boolean | string | number | null);
   return { ok: true };
 });
 

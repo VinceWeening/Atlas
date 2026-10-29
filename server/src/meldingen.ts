@@ -24,8 +24,15 @@ type Gebeurtenis = {
   camera: string;
   label: string;
   start_time: number;
+  end_time?: number | null;
   false_positive?: boolean | null;
+  /** Zones waar het ding in is geweest. */
+  zones?: string[];
+  /** Naam uit de gezichtsherkenning (Frigate 0.16): een tekst, of [naam, zekerheid]. */
+  sub_label?: string | [string, number] | null;
 };
+
+const naamVan = (g: Gebeurtenis) => (Array.isArray(g.sub_label) ? g.sub_label[0] : g.sub_label) || null;
 
 type Telefoon = {
   toestellen(): Promise<Toestel[]>;
@@ -55,6 +62,8 @@ export class Meldingen {
   private cameras: { tijd: number; lijst: string[] } | null = null;
   /** De eerste ronde na het opstarten alleen onthouden wat er al was, anders komt een herstart met oude meldingen. */
   private eersteRonde = true;
+  /** Gebeurtenissen die nog wachten op een gezicht of een zone, met wanneer Atlas ze voor het eerst zag. */
+  private wacht = new Map<string, { gezien: number; start: number }>();
   bereikbaar = false;
 
   constructor(
@@ -78,6 +87,49 @@ export class Meldingen {
   sinds(na: number | null) {
     const meldingen = na == null ? this.lijst.slice(-10) : this.lijst.filter((m) => m.volg > na);
     return { laatste: this.volg, meldingen };
+  }
+
+  /** De laatste opnames van wat er in Meldingen › Waarvoor aan staat (standaard personen), nieuwste eerst. */
+  async opnames() {
+    if (!this.frigate.adres) return [];
+    const soorten = instellingen().meldingen.soorten.join(',') || 'person';
+    const lijst = (await (
+      await fetch(`${this.frigate.adres}/api/events?limit=24&has_clip=1&labels=${encodeURIComponent(soorten)}`, { signal: AbortSignal.timeout(8000) })
+    ).json()) as Gebeurtenis[];
+    return lijst
+      .filter((g) => !g.false_positive)
+      .map((g) => ({
+        id: g.id,
+        camera: cameraNaam(g.camera),
+        titel: naamVan(g) ?? soortNamen[g.label] ?? cameraNaam(g.label),
+        tijd: new Date(g.start_time * 1000).toISOString(),
+        duur: g.end_time ? Math.round(g.end_time - g.start_time) : null,
+        beeld: `/api/meldingen/${encodeURIComponent(g.id)}/beeld`,
+        video: `/api/meldingen/${encodeURIComponent(g.id)}/video`,
+      }));
+  }
+
+  /** De opname van een gebeurtenis; een Range-kop gaat mee zodat de video kan spoelen. */
+  async video(id: string, bereik?: string) {
+    if (!this.frigate.adres || !/^[\w.-]{1,80}$/.test(id)) return null;
+    const antwoord = await fetch(`${this.frigate.adres}/api/events/${id}/clip.mp4`, { headers: bereik ? { range: bereik } : {}, signal: AbortSignal.timeout(30_000) });
+    if (!antwoord.ok || !antwoord.body) return null;
+    return antwoord;
+  }
+
+  /** Zones per camera en de namen uit de gezichtsherkenning, voor het tandwiel. */
+  async frigateDetails(): Promise<{ zones: string[]; gezichten: string[] }> {
+    if (!this.frigate.adres) return { zones: [], gezichten: [] };
+    const config = (await (await fetch(`${this.frigate.adres}/api/config`, { signal: AbortSignal.timeout(8000) })).json()) as {
+      cameras?: Record<string, { zones?: Record<string, unknown> }>;
+    };
+    const zones = Object.entries(config.cameras ?? {}).flatMap(([camera, c]) => Object.keys(c.zones ?? {}).map((z) => `${camera}/${z}`));
+    // De gezichtenbibliotheek bestaat pas vanaf Frigate 0.16; bij een oudere versie blijft de lijst leeg.
+    const gezichten = await fetch(`${this.frigate.adres}/api/faces`, { signal: AbortSignal.timeout(8000) })
+      .then((a) => (a.ok ? (a.json() as Promise<Record<string, unknown>>) : {}))
+      .then((f) => Object.keys(f).filter((n) => n !== 'train'))
+      .catch(() => [] as string[]);
+    return { zones, gezichten };
   }
 
   async frigateCameras(): Promise<string[]> {
@@ -130,15 +182,16 @@ export class Meldingen {
     const frigate = await this.frigate.vind();
     if (!frigate) return;
     try {
-      const adres = `${frigate}/api/events?limit=50&after=${Math.floor(this.laatsteStart - 60)}`;
-      const antwoord = await fetch(adres, { signal: AbortSignal.timeout(8000) });
+      // Ook gebeurtenissen die nog wachten op een gezicht of een zone blijven in beeld.
+      const vanaf = Math.min(this.laatsteStart, ...[...this.wacht.values()].map((w) => w.start)) - 60;
+      const antwoord = await fetch(`${frigate}/api/events?limit=50&after=${Math.floor(vanaf)}`, { signal: AbortSignal.timeout(8000) });
       if (!antwoord.ok) throw new Error(`Frigate gaf ${antwoord.status}`);
       const nieuw = ((await antwoord.json()) as Gebeurtenis[]).filter((g) => !this.gezien.has(g.id)).sort((a, b) => a.start_time - b.start_time);
       this.bereikbaar = true;
       for (const g of nieuw) {
-        this.gezien.add(g.id);
         this.laatsteStart = Math.max(this.laatsteStart, g.start_time);
-        if (!g.false_positive && !this.eersteRonde) await this.gebeurtenis(g);
+        if (this.eersteRonde || g.false_positive) this.klaar(g.id);
+        else await this.gebeurtenis(g);
       }
       this.eersteRonde = false;
       // De lijst met geziene gebeurtenissen niet eindeloos laten groeien.
@@ -149,9 +202,35 @@ export class Meldingen {
     }
   }
 
+  private klaar(id: string) {
+    this.gezien.add(id);
+    this.wacht.delete(id);
+  }
+
+  /**
+   * Beslist per gebeurtenis: melden, overslaan, of nog even wachten. Wachten gebeurt als de gezichtsherkenning nog bezig
+   * kan zijn (een paar seconden) of als de camera zones heeft gekozen en het ding daar nog niet in is geweest.
+   */
   private async gebeurtenis(g: Gebeurtenis) {
     const inst = instellingen().meldingen;
-    if (!inst.soorten.includes(g.label) || inst.camerasUit.includes(g.camera)) return;
+    if (!inst.soorten.includes(g.label) || inst.camerasUit.includes(g.camera)) return this.klaar(g.id);
+    const eerst = this.wacht.get(g.id)?.gezien ?? Date.now();
+    if (!this.wacht.has(g.id)) this.wacht.set(g.id, { gezien: eerst, start: g.start_time });
+    const leeftijd = Date.now() - eerst;
+    const afgelopen = !!g.end_time;
+
+    const zones = inst.zones.filter((z) => z.startsWith(`${g.camera}/`)).map((z) => z.slice(g.camera.length + 1));
+    const inZone = zones.length ? (g.zones ?? []).find((z) => zones.includes(z)) : undefined;
+    if (zones.length && !inZone) {
+      if (afgelopen || leeftijd > 120_000) this.klaar(g.id);
+      return;
+    }
+
+    const naam = naamVan(g);
+    if (!naam && g.label === 'person' && !afgelopen && leeftijd < 6_000) return;
+    if (naam && inst.bekenden.some((b) => b.toLowerCase() === naam.toLowerCase())) return this.klaar(g.id);
+
+    this.klaar(g.id);
     const nu = Date.now();
     if ((this.stilTot.get(g.camera) ?? 0) > nu) return;
     this.stilTot.set(g.camera, nu + inst.wachttijd * 60_000);
@@ -160,8 +239,8 @@ export class Meldingen {
       id: g.id,
       camera: g.camera,
       soort: g.label,
-      titel: `${soortNamen[g.label] ?? cameraNaam(g.label)} bij ${cameraNaam(g.camera)}`,
-      tekst: `Gezien om ${uur(tijd)}`,
+      titel: `${naam ?? soortNamen[g.label] ?? cameraNaam(g.label)} bij ${cameraNaam(g.camera)}`,
+      tekst: `Gezien om ${uur(tijd)}${inZone ? ` · ${cameraNaam(inZone)}` : ''}`,
       tijd: tijd.toISOString(),
       beeld: `/api/meldingen/${encodeURIComponent(g.id)}/beeld`,
     });

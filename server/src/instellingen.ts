@@ -1,7 +1,7 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
 const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads'];
 type Blok = (typeof BLOKKEN)[number];
@@ -19,6 +19,10 @@ export type Meldingen = {
   camerasUit: string[];
   /** Minuten stilte per camera na een melding. */
   wachttijd: number;
+  /** Zones uit Frigate als "camera/zone". Heeft een camera gekozen zones, dan alleen een melding als iemand daarin komt. */
+  zones: string[];
+  /** Namen uit de gezichtsherkenning van Frigate die geen melding geven, bijvoorbeeld de mensen die hier wonen. */
+  bekenden: string[];
 };
 export type Instellingen = {
   blokken: Record<Blok, boolean>;
@@ -27,19 +31,27 @@ export type Instellingen = {
   /** Belangrijke data: een deadline (alleen datum) of een periode (van t/m datum). */
   belangrijk: Datum[];
   meldingen: Meldingen;
+  /** Lampen en schakelaars op de kaart Favorieten, in deze volgorde. */
+  favorieten: string[];
+  /** Knoppen onderin; leeg betekent alle scènes uit Home Assistant. */
+  snelkoppelingen: string[];
 };
 
 const standaard: Instellingen = {
   blokken: Object.fromEntries(BLOKKEN.map((b) => [b, !STANDAARD_UIT.includes(b)])) as Record<Blok, boolean>,
   start: { breed: 'thuis', smal: 'overzicht' },
   belangrijk: [],
-  meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2 },
+  meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2, zones: [], bekenden: [] },
+  favorieten: [],
+  snelkoppelingen: [],
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
 // Een blok dat later is toegevoegd, staat bij een oud bestand nog niet in de lijst.
 huidig.blokken = { ...standaard.blokken, ...huidig.blokken };
 huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
+huidig.favorieten ??= [];
+huidig.snelkoppelingen ??= [];
 
 export const instellingen = () => huidig;
 
@@ -77,6 +89,12 @@ export function zetInstellingen(nieuw: unknown): string | null {
     }
     volgende.belangrijk = lijst.sort((a, b) => a.datum.localeCompare(b.datum));
   }
+  for (const lijst of ['favorieten', 'snelkoppelingen'] as const) {
+    const w = n[lijst];
+    if (w === undefined) continue;
+    if (!Array.isArray(w) || w.length > 30 || w.some((e) => typeof e !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(e))) return 'Ongeldige lijst met apparaten';
+    volgende[lijst] = [...new Set(w as string[])];
+  }
   if (n.meldingen !== undefined) {
     const m = n.meldingen as Partial<Meldingen>;
     if (!m || typeof m !== 'object') return 'Ongeldige meldingen';
@@ -101,6 +119,16 @@ export function zetInstellingen(nieuw: unknown): string | null {
       if (!Array.isArray(m.camerasUit) || m.camerasUit.length > 50 || m.camerasUit.some((c) => typeof c !== 'string' || !/^[\w-]{1,64}$/.test(c)))
         return 'Ongeldige camera';
       v.camerasUit = [...new Set(m.camerasUit)];
+    }
+    if (m.zones !== undefined) {
+      if (!Array.isArray(m.zones) || m.zones.length > 50 || m.zones.some((z) => typeof z !== 'string' || !/^[\w-]{1,64}\/[\w-]{1,64}$/.test(z)))
+        return 'Ongeldige zone';
+      v.zones = [...new Set(m.zones)];
+    }
+    if (m.bekenden !== undefined) {
+      if (!Array.isArray(m.bekenden) || m.bekenden.length > 30 || m.bekenden.some((b) => typeof b !== 'string' || !b.trim() || b.length > 60))
+        return 'Ongeldige naam';
+      v.bekenden = [...new Set(m.bekenden.map((b) => b.trim()))];
     }
     if (m.wachttijd !== undefined) {
       if (typeof m.wachttijd !== 'number' || !Number.isInteger(m.wachttijd) || m.wachttijd < 0 || m.wachttijd > 60) return 'Ongeldige wachttijd';

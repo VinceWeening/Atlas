@@ -1,6 +1,7 @@
 import './styles.css';
 import { lagen, type Ruimte } from './huis';
 import { instellingen, type Instellingen } from './instellingen';
+import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { maakApparaten, maakCameras } from './paginas';
 
 type Overzicht = {
@@ -15,7 +16,17 @@ type Overzicht = {
   google?: { ingesteld: boolean; gekoppeld: boolean };
 };
 type Scherm = Instellingen['start']['breed'] | 'apparaten' | 'cameras';
-type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
+type Apparaat = {
+  id: string;
+  naam: string;
+  soort: string;
+  tekst: string;
+  aan: boolean | null;
+  bediening: 'schakel' | 'start' | null;
+  bereikbaar: boolean;
+  lamp?: LampDelen;
+};
+type Lamp = { id: string; naam: string; aan: boolean; bereikbaar: boolean } & LampDelen;
 type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 type Huis = {
   bron: 'home-assistant' | 'voorbeeld';
@@ -42,6 +53,8 @@ const staat = {
   overzicht: null as Overzicht | null,
   huisFout: false,
   inst: null as Instellingen | null,
+  /** Alle apparaten uit Home Assistant, voor de favorieten en de knoppen onderin. */
+  apparaten: null as Apparaat[] | null,
   scherm: 'thuis' as Scherm,
   /** Het huis is uitgezet, maar tijdelijk naar voren gehaald met de huisknop. */
   huisVoor: false,
@@ -85,24 +98,32 @@ const lichtAan = (r: Ruimte) => !!kamerBij(r)?.lampen.some((l) => l.aan);
 function tekenHuis() {
   const huis = $('huis');
   const driedee = staat.modus === '3d';
+  // In 3D blijft het hele huis staan; een gekozen verdieping komt in focus en de rest blijft vaag zichtbaar. In 2D zie je
+  // alleen de gekozen verdieping (of de begane grond bij Alles).
   const getoond = !driedee && staat.verdieping === 'alle' ? 'bg' : staat.verdieping;
-  const gestapeld = getoond === 'alle';
+  const gestapeld = driedee;
+  const focus = driedee && staat.verdieping !== 'alle' ? lagen.findIndex((l) => l.id === staat.verdieping) : -1;
 
-  const gebouw = maak('div', 'gebouw' + (driedee ? '' : ' plat'));
+  const gebouw = maak('div', 'gebouw' + (driedee ? '' : ' plat') + (focus >= 0 ? ' met-focus' : ''));
   gebouw.style.transform = !driedee
     ? 'scale(0.92)'
-    : gestapeld
-      ? 'translateY(110px) rotateX(60deg) rotateZ(-38deg) scale(0.78)'
-      : 'translateY(40px) rotateX(55deg) rotateZ(-38deg) scale(0.95)';
+    : focus >= 0
+      ? // Het huis schuift zo dat de gekozen verdieping ongeveer in het midden staat.
+        `translateY(${Math.round(70 + (lagen[focus].z - 160) * 0.7)}px) rotateX(58deg) rotateZ(-38deg) scale(0.84)`
+      : 'translateY(110px) rotateX(60deg) rotateZ(-38deg) scale(0.78)';
 
-  for (const laag of lagen) {
+  for (const [i, laag] of lagen.entries()) {
     if (!gestapeld && getoond !== laag.id) continue;
-    const vlak = maak('div', 'laag');
+    const vlak = maak('div', 'laag' + (focus < 0 ? '' : i === focus ? ' focus' : ' vervaagd'));
     vlak.style.height = `${laag.hoogte}%`;
-    vlak.style.transform = `translateZ(${gestapeld ? laag.z : 0}px)`;
-    vlak.style.boxShadow = gestapeld
-      ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
-      : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
+    // Verdiepingen boven de gekozen schuiven wat omhoog, zodat je van bovenaf goed in de gekozen verdieping kijkt.
+    const z = gestapeld ? laag.z + (focus >= 0 && i > focus ? 90 : 0) : 0;
+    vlak.style.transform = `translateZ(${z}px)`;
+    vlak.style.boxShadow = i === focus
+      ? '0 0 0 2px #D6EDFF, 0 0 40px rgba(111,168,255,0.35), 0 50px 80px -20px rgba(0,0,0,0.7)'
+      : gestapeld
+        ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
+        : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
     // Op de naam van een verdieping klikken gaat naar die verdieping, en nog een keer klikken terug naar alles.
     const naam = maak('button', 'lbl laag-naam', laag.label);
     naam.type = 'button';
@@ -207,6 +228,8 @@ function lampRij(lamp: Lamp) {
   schakelaar.disabled = !lamp.bereikbaar;
   schakelaar.addEventListener('click', () => zetLamp(lamp, !lamp.aan));
   rij.append(info, schakelaar);
+  const schuiven = lampSchuiven(lamp, () => setTimeout(laadHuis, 400));
+  if (schuiven) rij.append(schuiven);
   return rij;
 }
 
@@ -247,7 +270,9 @@ function tekenKamer() {
     lijst.replaceChildren(maak('p', 'muted', 'Deze ruimte is nog niet gekoppeld aan een ruimte in Home Assistant.'));
   } else if (lampen.length === 0) {
     lijst.replaceChildren(maak('p', 'muted', 'Hier zijn geen lampen.'));
-  } else {
+  } else if (!(schuiftNu() && lijst.dataset.kamer === staat.kamer)) {
+    // Niet opnieuw opbouwen terwijl er aan een schuifje getrokken wordt.
+    lijst.dataset.kamer = staat.kamer ?? '';
     lijst.replaceChildren(...lampen.map(lampRij));
   }
 }
@@ -263,7 +288,51 @@ function tekenHud() {
   );
 }
 
+async function bedienApparaat(a: Apparaat, aan: boolean) {
+  if (a.bediening === 'schakel') a.aan = aan; // meteen tonen
+  tekenFavorieten();
+  tekenScenes();
+  try {
+    const antwoord = await fetch(`/api/apparaat/${encodeURIComponent(a.id)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ aan }),
+    });
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+  } catch (fout) {
+    console.error('Bedienen mislukt', fout);
+    if (a.bediening === 'schakel') a.aan = !aan;
+  }
+  setTimeout(() => {
+    laadApparaten();
+    laadHuis();
+  }, 700);
+}
+
+/** De knoppen onderin: zelf gekozen in Apparaten of het tandwiel, en anders alle scènes. */
 function tekenScenes() {
+  const gekozen = staat.inst?.snelkoppelingen ?? [];
+  if (gekozen.length) {
+    const knoppen = gekozen.map((id) => staat.apparaten?.find((a) => a.id === id)).filter((a): a is Apparaat => !!a);
+    $('scenes-pil').hidden = knoppen.length === 0;
+    $('scenes').replaceChildren(
+      ...knoppen.map((a) => {
+        const knop = maak('button', a.bediening === 'schakel' && a.aan ? 'actief-warm' : undefined, a.naam);
+        knop.type = 'button';
+        if (a.bediening === 'schakel') knop.setAttribute('aria-pressed', String(!!a.aan));
+        knop.disabled = !a.bereikbaar;
+        knop.addEventListener('click', () => {
+          if (a.bediening === 'start') {
+            knop.classList.add('actief-warm');
+            setTimeout(() => knop.classList.remove('actief-warm'), 1200);
+          }
+          bedienApparaat(a, a.bediening === 'start' ? true : !a.aan);
+        });
+        return knop;
+      }),
+    );
+    return;
+  }
   const scenes = staat.huis?.scenes ?? [];
   $('scenes-pil').hidden = scenes.length === 0;
   $('scenes').replaceChildren(
@@ -282,6 +351,70 @@ function tekenScenes() {
       return knop;
     }),
   );
+}
+
+function tekenFavorieten() {
+  const ids = staat.inst?.favorieten ?? [];
+  if (schuiftNu() && $('favorieten').querySelector('input[type=range]')) return;
+  if (!ids.length) {
+    $('favorieten').replaceChildren(maak('p', 'muted klein', 'Geef lampen een ster bij Apparaten, dan staan ze hier.'));
+    return;
+  }
+  if (!staat.apparaten) {
+    $('favorieten').replaceChildren(maak('p', 'muted klein', 'Laden…'));
+    return;
+  }
+  $('favorieten').replaceChildren(
+    ...ids
+      .map((id) => staat.apparaten!.find((a) => a.id === id))
+      .filter((a): a is Apparaat => !!a)
+      .map((a) => {
+        const vak = maak('div', 'favoriet-vak' + (a.aan ? ' aan' : ''));
+        const tegel = maak('button', 'favoriet' + (a.aan ? ' aan' : ''));
+        tegel.type = 'button';
+        tegel.disabled = !a.bereikbaar;
+        if (a.bediening === 'schakel') tegel.setAttribute('aria-pressed', String(!!a.aan));
+        tegel.append(maak('span', 'favoriet-lamp'), maak('strong', undefined, a.naam), maak('span', 'muted klein', a.bereikbaar ? a.tekst || 'Starten' : 'Niet bereikbaar'));
+        tegel.addEventListener('click', () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan));
+        vak.append(tegel);
+        // Bij een brandende dimbare lamp meteen een schuifje voor de helderheid.
+        const schuiven = a.aan ? lampSchuiven({ ...a, lamp: a.lamp && { ...a.lamp, kleurtemp: null } }, () => setTimeout(laadApparaten, 400)) : null;
+        if (schuiven) vak.append(schuiven);
+        return vak;
+      }),
+  );
+}
+
+async function laadApparaten() {
+  if (!staat.inst?.favorieten.length && !staat.inst?.snelkoppelingen.length && staat.scherm !== 'apparaten') return;
+  try {
+    const antwoord = await fetch('/api/apparaten');
+    if (!antwoord.ok) return;
+    const data = (await antwoord.json()) as { ruimtes: { apparaten: Apparaat[] }[]; overig: Apparaat[] };
+    staat.apparaten = [...data.ruimtes.flatMap((r) => r.apparaten), ...data.overig];
+  } catch {
+    return;
+  }
+  tekenFavorieten();
+  tekenScenes();
+}
+
+/** Zet een apparaat in of uit de favorieten of de knoppen onderin, en bewaart dat op de server. */
+async function wisselLijst(lijst: 'favorieten' | 'snelkoppelingen', id: string) {
+  if (!staat.inst) return;
+  const huidig = staat.inst[lijst];
+  const nieuw = huidig.includes(id) ? huidig.filter((x) => x !== id) : [...huidig, id];
+  staat.inst = { ...staat.inst, [lijst]: nieuw };
+  try {
+    const antwoord = await fetch('/api/instellingen', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ [lijst]: nieuw }),
+    });
+    if (antwoord.ok) zetInst(await antwoord.json());
+  } catch (fout) {
+    console.error('Bewaren mislukt', fout);
+  }
 }
 
 let cameraGetoond = '';
@@ -345,6 +478,7 @@ function pasToe() {
   if (staat.scherm === 'cameras') {
     cameraScherm.zet(staat.huis?.cameras ?? []);
     cameraScherm.ververs();
+    cameraScherm.laadOpnames();
   }
   app.classList.toggle('huis-achter', achter);
   $('huis-knop-pil').hidden = pagina || (!achter && !(huisUit && staat.huisVoor));
@@ -354,13 +488,17 @@ function pasToe() {
   document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.scherm === staat.scherm)));
 }
 
-const apparaten = maakApparaten(() => laadHuis());
+const apparaten = maakApparaten(() => laadHuis(), {
+  heeft: (lijst, id) => !!staat.inst?.[lijst].includes(id),
+  wissel: wisselLijst,
+});
 const cameraScherm = maakCameras();
 setInterval(() => {
   if (document.visibilityState !== 'visible') return;
   if (staat.scherm === 'apparaten') apparaten.laad();
   if (staat.scherm === 'cameras') cameraScherm.ververs();
 }, 5_000);
+setInterval(() => document.visibilityState === 'visible' && staat.scherm === 'cameras' && cameraScherm.laadOpnames(), 30_000);
 
 const dag = 86_400_000;
 const middag = (iso: string) => new Date(`${iso}T12:00:00`).getTime();
@@ -651,6 +789,9 @@ function zetInst(inst: Instellingen, eerste = false) {
   if (eerste) staat.scherm = inst.start[matchMedia('(max-width: 1000px)').matches ? 'smal' : 'breed'];
   pasToe();
   tekenBelangrijk();
+  tekenFavorieten();
+  tekenScenes();
+  if (eerste || !staat.apparaten) laadApparaten();
   if (!eerste) laadApps();
 }
 
@@ -797,6 +938,7 @@ laadMeldingen();
 setInterval(laadMeldingen, 5_000);
 kijkVersie();
 setInterval(kijkVersie, 30 * 60_000);
+setInterval(() => document.visibilityState === 'visible' && laadApparaten(), 5_000);
 laadApps();
 setInterval(() => document.visibilityState === 'visible' && laadApps(), 30_000);
 setInterval(tekenBelangrijk, 3_600_000);

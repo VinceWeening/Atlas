@@ -153,6 +153,25 @@ p, h1, h2 { margin: 0; }
 .schakelaar[aria-checked="true"] { background: var(--schakelaar); }
 .schakelaar[aria-checked="true"]::after { transform: translateX(20px); }
 
+/* Schuifjes voor helderheid en warm/koel wit. */
+.lamp:has(> .lamp-schuiven), .camera-opties .lamp:has(> .schuif) { flex-wrap: wrap; }
+.lamp-schuiven { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.schuif { display: flex; align-items: center; gap: 10px; }
+.schuif input {
+  flex: 1; min-width: 0; height: 28px; margin: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer;
+  --spoor: linear-gradient(90deg, rgba(255,186,110,0.85) var(--vul, 50%), rgba(255,255,255,0.12) var(--vul, 50%));
+}
+.schuif.kleurtemp input { --spoor: linear-gradient(90deg, #FFB46B, #FFF1DC 50%, #CFE6FF); }
+.schuif input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--spoor); }
+.schuif input::-moz-range-track { height: 6px; border-radius: 3px; background: var(--spoor); }
+.schuif input::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.schuif input::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.schuif input:focus-visible { outline: 2px solid var(--ijs); outline-offset: 2px; border-radius: 4px; }
+.schuif-waarde { flex: none; width: 64px; text-align: right; font-size: 12px; color: var(--gedempt); font-variant-numeric: tabular-nums; }
+.favoriet-vak { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.favoriet-vak .lamp-schuiven { padding: 0 4px; }
+.favoriet-vak .schuif-waarde { width: 34px; }
+
 .orb {
   width: 76px; height: 76px; border-radius: 50%; border: 0;
   background: radial-gradient(circle at 38% 32%, #fff 0%, #CFE8FF 20%, #6FA8FF 58%, #24468F 100%);
@@ -225,7 +244,53 @@ p, h1, h2 { margin: 0; }
 .camera-tegel-naam { position: absolute; left: 16px; bottom: 14px; padding: 6px 12px; border-radius: 999px; background: rgba(7,9,13,0.6); backdrop-filter: blur(8px); }
 .camera-tegel:focus-visible { outline: 2px solid var(--ijs); outline-offset: 3px; }
 .instellingen.camera-groot { width: min(1280px, calc(100vw - 32px)); }
+/* Het grote camerabeeld met de instellingen van de camera ernaast (of eronder op een smal scherm). */
+.camera-groot-inhoud { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.camera-opties { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 200px); overflow-y: auto; }
+.camera-opties h3 { margin: 0 0 2px; }
+.camera-opties .lamp { padding: 10px 12px; }
+.camera-opties .schuif { flex-basis: 100%; }
+.camera-opties .keuze { max-width: 140px; }
+@media (max-width: 900px) { .camera-groot-inhoud { grid-template-columns: 1fr; } }
 #camera-groot-beeld { width: 100%; max-height: calc(100vh - 200px); object-fit: contain; border-radius: 16px; display: block; background: rgba(255,255,255,0.04); }
+
+/* Ster en pijl in Apparaten */
+.icoon-knop { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--gedempt); cursor: pointer; opacity: 0.55; transition: opacity 200ms ease, color 200ms ease, background 200ms ease; }
+.icoon-knop svg { fill-opacity: 0; }
+.icoon-knop:hover, .icoon-knop:focus-visible { opacity: 1; background: rgba(255,255,255,0.06); }
+.icoon-knop.aan { opacity: 1; color: var(--warm); }
+.icoon-knop.aan svg { fill-opacity: 1; }
+.icoon-knop:focus-visible { outline: 2px solid var(--ijs); outline-offset: 1px; }
+.apparaat .lamp-info { flex: 1; min-width: 0; }
+.apparaat { gap: 4px; }
+
+/* Kaart Favorieten: tegels die oplichten als de lamp aan is */
+.favorieten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.favoriet {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; min-width: 0; border-radius: 16px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: inherit; font: inherit; text-align: left;
+  transition: background 250ms ease, border-color 250ms ease, box-shadow 250ms ease;
+}
+.favoriet strong { font-weight: 500; font-size: 14px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 6px; }
+.favoriet .klein { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.favoriet-lamp { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.18); transition: background 250ms ease, box-shadow 250ms ease; }
+.favoriet.aan { background: rgba(255,186,110,0.12); border-color: rgba(255,186,110,0.35); box-shadow: 0 0 24px -8px rgba(255,186,110,0.5); }
+.favoriet.aan .favoriet-lamp { background: var(--warm); box-shadow: 0 0 12px var(--warm); }
+.favoriet:hover { border-color: rgba(255,255,255,0.18); }
+.favoriet:focus-visible { outline: 2px solid var(--ijs); outline-offset: 2px; }
+.favoriet:disabled { opacity: 0.45; cursor: default; }
+
+/* Terugkijken */
+.opnames { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.opname-kaart { position: relative; padding: 0; border: 0; overflow: hidden; color: inherit; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
+.opname-kaart img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: rgba(255,255,255,0.04); }
+.opname-speel { position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(7,9,13,0.6); backdrop-filter: blur(8px); color: var(--tekst); }
+.opname-tekst { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 14px; }
+.opname-tekst strong { font-weight: 500; font-size: 14px; }
+.opname-kaart:hover .opname-speel { background: var(--ijs); color: #07090D; }
+.opname-kaart:focus-visible { outline: 2px solid var(--ijs); outline-offset: 3px; }
+#opname-video { width: 100%; max-height: calc(100vh - 200px); border-radius: 16px; background: #000; display: block; }
+.pagina > .kop { margin-top: 8px; }
 
 /* App-blokken */
 .app-link { color: var(--ijs); text-decoration: none; }
@@ -273,7 +338,17 @@ a.mailregel:focus-visible { outline: 2px solid var(--ijs); outline-offset: 0; }
 }
 .instellingen::backdrop { background: rgba(4,6,10,0.6); backdrop-filter: blur(6px); }
 .inst-sectie { display: flex; flex-direction: column; gap: 12px; }
-.inst-sectie + .inst-sectie, #instellingen-inhoud > div > .inst-sectie { margin-top: 28px; }
+.inst-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 20px; border-radius: 18px; background: rgba(255,255,255,0.05); overflow-x: auto; scrollbar-width: none; }
+.inst-tab { flex: 1 0 auto; min-height: 36px; padding: 0 14px; border: 0; border-radius: 14px; background: none; color: var(--gedempt); font: inherit; font-size: 14px; cursor: pointer; transition: background 200ms ease, color 200ms ease; }
+.inst-tab:hover { color: var(--tekst); }
+.inst-tab[aria-selected="true"] { background: rgba(168,216,255,0.14); color: var(--ijs-licht); }
+.inst-tab:focus-visible { outline: 2px solid var(--ijs); outline-offset: 1px; }
+.inst-tabs + .inst-paneel { min-height: 320px; }
+.inst-raster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.inst-raster .lamp { padding: 10px 12px 10px 14px; }
+@media (max-width: 600px) { .inst-raster { grid-template-columns: 1fr; } }
+#instellingen-inhoud > .inst-sectie:first-child { margin-bottom: 20px; }
+.inst-sectie + .inst-sectie, .inst-paneel > div + div > .inst-sectie, .inst-paneel > div + .inst-sectie { margin-top: 28px; }
 .inst-stappen { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--gedempt); }
 .inst-rij { display: flex; gap: 8px; }
 .inst-veld {
@@ -309,6 +384,10 @@ a.mailregel:focus-visible { outline: 2px solid var(--ijs); outline-offset: 0; }
 }
 .laag-naam { position: absolute; right: 100%; top: 0; padding: 4px 16px 4px 0; white-space: nowrap; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
 .laag-naam:hover { color: var(--ijs-licht); }
+/* Gekozen verdieping in focus: de rest blijft als vage schets zichtbaar en is niet aan te klikken, op de naam na. */
+.laag { transition: transform 900ms cubic-bezier(.2,.8,.2,1), opacity 500ms ease; }
+.laag.vervaagd { opacity: 0.16; }
+.laag.vervaagd .ruimte { pointer-events: none; }
 
 /* Verdiepingen: een smalle rail naast het huis; scrollen boven het huis doet hetzelfde */
 .verdieping-rail {
