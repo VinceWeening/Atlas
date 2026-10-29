@@ -157,10 +157,18 @@ function lampDelen(t: Toestand): Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtem
   };
 }
 
+/** De naam uit Home Assistant, of anders een leesbare naam uit de entiteit: sensor.woonkamer_temp wordt "Woonkamer temp". */
+function vriendelijk(t: Toestand) {
+  const naam = t.attributes.friendly_name?.trim();
+  if (naam) return naam;
+  const deel = t.entity_id.split('.').slice(1).join('.').replace(/_/g, ' ').trim();
+  return deel ? deel.replace(/^\w/, (l) => l.toUpperCase()) : t.entity_id;
+}
+
 function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
   const soort = t.entity_id.split('.')[0];
   const a = t.attributes;
-  let naam = a.friendly_name ?? t.entity_id;
+  let naam = vriendelijk(t);
   // "Woonkamer Staande lamp" in de ruimte Woonkamer heet gewoon "Staande lamp".
   if (ruimte && naam.toLowerCase().startsWith(`${ruimte.toLowerCase()} `) && naam.length > ruimte.length + 1)
     naam = naam.slice(ruimte.length + 1).replace(/^\w/, (l) => l.toUpperCase());
@@ -246,7 +254,7 @@ export class HomeAssistant {
       }),
     ]);
     const perId = new Map(toestanden.map((t) => [t.entity_id, t]));
-    const naam = (t: Toestand) => t.attributes.friendly_name ?? t.entity_id;
+    const naam = vriendelijk;
     const kamerVan = new Map<string, string>();
     for (const r of ruimtes) for (const e of r.entiteiten) kamerVan.set(e, r.id);
 

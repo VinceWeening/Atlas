@@ -1,4 +1,6 @@
 // Het tandwiel: blokken aan/uit, startscherm, belangrijke data en de Google-koppeling.
+import { meldFout } from './melding';
+
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
 export type Meldingen = {
@@ -18,6 +20,7 @@ export type Instellingen = {
   meldingen: Meldingen;
   favorieten: string[];
   snelkoppelingen: string[];
+  namen: Record<string, string>;
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -69,25 +72,49 @@ async function stuur(adres: string, methode: string, body?: unknown) {
 const BIJWERKEN =
   'sudo docker pull ghcr.io/vinceweening/atlas:latest && cd "$(sudo docker inspect atlas --format \'{{ index .Config.Labels "com.docker.compose.project.working_dir" }}\')" && sudo docker compose up -d';
 
-const BLOKNAMEN: [string, string][] = [
-  ['huis', 'Huis (plattegrond)'],
-  ['vandaag', 'Vandaag'],
-  ['belangrijk', 'Belangrijk'],
-  ['mail', 'Mail'],
-  ['kamer', 'Kamer en lampen'],
-  ['favorieten', 'Favorieten'],
-  ['camera', 'Camera'],
-  ['scenes', 'Scènes'],
-  ['hud', 'Statusregel boven'],
-  ['frigate', 'Frigate'],
-  ['jellyfin', 'Jellyfin'],
-  ['seerr', 'Seerr (aanvragen)'],
-  ['downloads', 'Downloads (Sonarr en Radarr)'],
+// Blokken per plek, met één regel uitleg, zodat je weet wat je aan- of uitzet.
+const BLOKGROEPEN: [string, [string, string, string][]][] = [
+  [
+    'Thuis en Overzicht',
+    [
+      ['huis', 'Huis', 'Het 3D-huis in het midden van Thuis'],
+      ['vandaag', 'Vandaag', 'Afspraken van vandaag en morgen'],
+      ['belangrijk', 'Belangrijk', 'Deadlines en periodes uit het tabblad Data'],
+      ['mail', 'Mail', 'Belangrijke mail uit Gmail'],
+      ['kamer', 'Kamer', 'De gekozen kamer met al zijn lampen'],
+      ['camera', 'Camera', 'Beeld van de voordeur en andere camera’s'],
+      ['favorieten', 'Favorieten', 'Lampen met een ster, in het dock onderin'],
+      ['scenes', 'Knoppen onderin', 'Scènes of je eigen knoppen in het dock'],
+      ['hud', 'Status bovenin', 'Temperatuur binnen, lampen aan en de voordeur'],
+    ],
+  ],
+  [
+    'Overzicht: media en server',
+    [
+      ['jellyfin', 'Verder kijken', 'Wat je in Jellyfin aan het kijken bent'],
+      ['downloads', 'Downloads', 'Sonarr en Radarr'],
+      ['seerr', 'Aanvragen', 'Seerr: wat er wacht en wat er klaar is'],
+      ['frigate', 'Frigate', 'Wat de camera’s vandaag zagen'],
+    ],
+  ],
+  [
+    'Extra',
+    [
+      ['spraak', 'Spraakbol', 'Doet pas iets vanaf fase 3'],
+      ['sneltoetsen', 'Sneltoetsen', '1 t/m 4 voor de schermen, pijltjes voor de verdiepingen'],
+    ],
+  ],
 ];
 
-function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>) {
+function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>, uitleg?: string) {
   const rij = maak('div', 'lamp');
-  rij.append(maak('div', 'lamp-info', naam));
+  const info = maak('div', 'lamp-info');
+  if (uitleg) {
+    const namen = maak('span');
+    namen.append(naam, maak('small', undefined, uitleg));
+    info.append(namen);
+  } else info.textContent = naam;
+  rij.append(info);
   const schakelaar = knop('', 'schakelaar');
   schakelaar.setAttribute('role', 'switch');
   schakelaar.setAttribute('aria-checked', String(aan));
@@ -100,6 +127,7 @@ function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Pro
     } catch {
       aan = !aan;
       schakelaar.setAttribute('aria-checked', String(aan));
+      meldFout('Bewaren lukte niet');
     }
   });
   rij.append(schakelaar);
@@ -128,12 +156,14 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     const blokken = maak('section', 'inst-sectie');
     blokken.append(
       maak('h3', 'lbl', 'BLOKKEN'),
-      maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren.'),
+      maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren. Lege blokken verdwijnen vanzelf.'),
     );
-    const raster = maak('div', 'inst-raster');
-    for (const [id, naam] of BLOKNAMEN)
-      raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
-    blokken.append(raster);
+    for (const [groep, lijst] of BLOKGROEPEN) {
+      const raster = maak('div', 'inst-raster');
+      for (const [id, naam, uitleg] of lijst)
+        raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } })), uitleg));
+      blokken.append(maak('p', 'inst-label', groep), raster);
+    }
 
     const start = maak('section', 'inst-sectie');
     start.append(maak('h3', 'lbl', 'STARTSCHERM'));
@@ -217,7 +247,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     };
   }
 
-  /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de pijl-knop bij Apparaten. */
+  /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de punaise bij Apparaten. */
   async function tekenSnelkoppelingen(inst: Instellingen) {
     const sectie = maak('section', 'inst-sectie');
     sectie.append(maak('h3', 'lbl', 'KNOPPEN ONDERIN'));
@@ -232,7 +262,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     const teken = () => {
       const ids = inst.snelkoppelingen;
       if (!ids.length) {
-        lijst.replaceChildren(maak('p', 'muted klein', 'Nu staan alle scènes onderin. Kies zelf knoppen met de pijl-knop bij een lamp, schakelaar of scène in Apparaten.'));
+        lijst.replaceChildren(maak('p', 'muted klein', 'Nu staan alle scènes onderin. Kies zelf knoppen met de punaise bij een lamp, schakelaar of scène in Apparaten.'));
         return;
       }
       lijst.replaceChildren(

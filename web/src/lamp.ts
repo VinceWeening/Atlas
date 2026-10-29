@@ -1,3 +1,5 @@
+import { meldFout, post } from './melding';
+
 // Schuifjes voor lampen: helderheid en, als de lamp het kan, warm of koel wit. Wordt gebruikt bij de kamer, bij
 // Apparaten en bij de favorieten.
 export type LampDelen = {
@@ -17,16 +19,12 @@ function maak<K extends keyof HTMLElementTagNameMap>(tag: K, klasse?: string, in
   return el;
 }
 
-async function stuur(id: string, opdracht: { helderheid?: number; kelvin?: number }) {
+async function stuur(id: string, naam: string, opdracht: { helderheid?: number; kelvin?: number }) {
   try {
-    const antwoord = await fetch(`/api/lamp/${encodeURIComponent(id)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(opdracht),
-    });
-    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    await post(`/api/lamp/${encodeURIComponent(id)}`, opdracht);
   } catch (fout) {
     console.error('Lamp instellen mislukt', fout);
+    meldFout(`${naam} reageert niet`);
   }
 }
 
@@ -96,7 +94,7 @@ export function lampSchuiven(lamp: { id: string; naam: string; aan: boolean | nu
       waarde: lamp.aan ? (delen.helderheid ?? 100) : 1,
       tekst: (w) => `${w}%`,
       klaar: async (w) => {
-        await stuur(lamp.id, { helderheid: w });
+        await stuur(lamp.id, lamp.naam, { helderheid: w });
         na();
       },
     }),
@@ -113,7 +111,7 @@ export function lampSchuiven(lamp: { id: string; naam: string; aan: boolean | nu
         waarde: kt.nu ?? Math.round((kt.min + kt.max) / 2),
         tekst: (w) => (w < 3300 ? 'Warm' : w < 4800 ? 'Neutraal' : 'Koel'),
         klaar: async (w) => {
-          await stuur(lamp.id, { kelvin: w });
+          await stuur(lamp.id, lamp.naam, { kelvin: w });
           na();
         },
       }),

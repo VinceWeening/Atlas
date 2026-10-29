@@ -28,6 +28,24 @@ const ha = haInstellingen();
 const huis = ha ? new HomeAssistant(ha) : new VoorbeeldHuis();
 app.log.info(ha ? `Home Assistant op ${ha.url}` : 'Geen HA_URL en HA_TOKEN ingesteld, het huis toont voorbeeldgegevens.');
 
+/** Zet de eigen namen uit het tandwiel over de namen uit Home Assistant, overal waar een apparaat met id en naam staat. */
+function metEigenNamen<T>(data: T): T {
+  const namen = instellingen().namen;
+  if (!Object.keys(namen).length) return data;
+  // Een kopie, want de voorbeeldgegevens zijn vaste objecten die niet blijvend mogen veranderen.
+  const kopie = structuredClone(data);
+  const loop = (w: unknown): void => {
+    if (Array.isArray(w)) w.forEach(loop);
+    else if (w && typeof w === 'object') {
+      const o = w as Record<string, unknown>;
+      if (typeof o.id === 'string' && typeof o.naam === 'string' && namen[o.id]) o.naam = namen[o.id];
+      Object.values(o).forEach(loop);
+    }
+  };
+  loop(kopie);
+  return kopie;
+}
+
 // Alleen gewone entiteitnamen van het juiste soort komen door naar Home Assistant.
 const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-z0-9_]+$`).test(waarde) ? waarde : null);
 
@@ -161,7 +179,7 @@ app.get<{ Params: { id: string } }>('/api/apps/jellyfin/beeld/:id', async (reque
 
 app.get('/api/apparaten', async (_request, reply) => {
   try {
-    return await huis.apparaten();
+    return metEigenNamen(await huis.apparaten());
   } catch (fout) {
     app.log.error(fout);
     return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
@@ -178,7 +196,7 @@ app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id
 
 app.get('/api/huis', async (_request, reply) => {
   try {
-    return await huis.huis();
+    return metEigenNamen(await huis.huis());
   } catch (fout) {
     app.log.error(fout);
     return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });

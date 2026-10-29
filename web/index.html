@@ -11,123 +11,143 @@
 </head>
 <body>
 <div class="app">
-  <div class="huis" id="huis" aria-label="Plattegrond, scroll om van verdieping te wisselen"></div>
-  <nav class="verdieping-rail huis-bediening" id="verdiepingen" aria-label="Verdiepingen"></nav>
+  <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
+  <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
+    <div class="rail-knoppen" id="verdiepingen"></div>
+    <div class="segment modus" role="group" aria-label="Weergave van het huis">
+      <button type="button" data-modus="2d">2D</button>
+      <button type="button" data-modus="3d">3D</button>
+    </div>
+  </nav>
 
   <div class="stage">
-    <section class="gl klok" aria-label="Tijd en weer"><div class="gl-in">
-      <svg class="ring" aria-hidden="true" viewBox="0 0 220 220">
-        <defs><linearGradient id="arc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6EDFF"/><stop offset="1" stop-color="#6FA8FF"/></linearGradient></defs>
-        <g class="spin"><circle cx="110" cy="110" r="100" fill="none" stroke="rgba(168,216,255,0.4)" stroke-width="3" stroke-dasharray="3 18"/></g>
-        <circle cx="110" cy="110" r="80" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
-        <circle id="dagboog" cx="110" cy="110" r="80" fill="none" stroke="url(#arc)" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 503" transform="rotate(-90 110 110)"/>
-      </svg>
-      <div>
-        <p class="tijd" id="tijd">--:--</p>
-        <p class="muted klein"><span id="datum"></span> · <span class="warm" id="weer"></span></p>
+    <header class="gl bovenbalk"><div class="gl-in balk-in">
+      <section class="klok" aria-label="Tijd en weer">
+        <svg class="ring" aria-hidden="true" viewBox="0 0 220 220">
+          <defs><linearGradient id="arc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6EDFF"/><stop offset="1" stop-color="#6FA8FF"/></linearGradient></defs>
+          <g class="spin"><circle cx="110" cy="110" r="100" fill="none" stroke="rgba(168,216,255,0.4)" stroke-width="6" stroke-dasharray="4 22"/></g>
+          <circle cx="110" cy="110" r="76" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="18"/>
+          <circle id="dagboog" cx="110" cy="110" r="76" fill="none" stroke="url(#arc)" stroke-width="18" stroke-linecap="round" stroke-dasharray="0 478" transform="rotate(-90 110 110)"/>
+        </svg>
+        <p class="tijd mono" id="tijd">--:--</p>
+        <p class="muted klein klok-regel"><span id="datum"></span> · <span class="warm" id="weer"></span></p>
+      </section>
+
+      <nav class="segment schermen" aria-label="Schermen">
+        <button type="button" data-scherm="thuis" aria-keyshortcuts="1">Thuis</button>
+        <button type="button" data-scherm="overzicht" aria-keyshortcuts="2">Overzicht</button>
+        <button type="button" data-scherm="apparaten" aria-keyshortcuts="3">Apparaten</button>
+        <button type="button" data-scherm="cameras" aria-keyshortcuts="4">Camera's</button>
+      </nav>
+
+      <div class="balk-rechts">
+        <div class="hud" id="hud" data-blok="hud" aria-label="Status van het huis"></div>
+        <button type="button" class="rond-knop" id="huis-knop" aria-pressed="false" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></button>
+        <button type="button" class="rond-knop" id="tandwiel" aria-label="Instellingen"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       </div>
-    </div></section>
+    </div></header>
 
-    <div class="midden-boven">
-      <span class="lbl" id="scherm-label">ATLAS · THUIS</span>
-      <div class="knoppen">
-        <div class="gl pil"><div class="gl-in segment">
-          <button type="button" data-scherm="thuis">Thuis</button>
-          <button type="button" data-scherm="overzicht">Overzicht</button>
-          <button type="button" data-scherm="apparaten">Apparaten</button>
-          <button type="button" data-scherm="cameras">Camera's</button>
-        </div></div>
-        <div class="gl pil" id="huis-knop-pil" hidden><div class="gl-in segment">
-          <button type="button" id="huis-knop" aria-pressed="false"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg><span class="huis-knop-tekst">Huis</span></button>
-        </div></div>
-        <div class="gl pil huis-bediening"><div class="gl-in segment">
-          <button type="button" data-modus="2d">2D</button>
-          <button type="button" data-modus="3d">3D</button>
-        </div></div>
-        <div class="gl pil"><div class="gl-in segment">
-          <button type="button" id="tandwiel" aria-label="Instellingen"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-        </div></div>
+    <!-- Thuis: links de dag, rechts de kamer en de camera. Op Overzicht verhuizen deze blokken naar de kolommen. -->
+    <div class="links" id="plek-links">
+      <section class="gl vandaag" aria-label="Vandaag" data-blok="vandaag"><div class="gl-in paneel">
+        <div class="kop"><h2 class="lbl">Vandaag</h2><span class="mono muted klein" id="aantal-afspraken"></span></div>
+        <div id="agenda" class="agenda"></div>
+        <p class="muted klein morgen" id="morgen"></p>
+      </div></section>
+
+      <section class="gl belangrijk" aria-label="Belangrijk" data-blok="belangrijk"><div class="gl-in paneel">
+        <div class="kop"><h2 class="lbl">Belangrijk</h2></div>
+        <div id="belangrijk"></div>
+      </div></section>
+
+      <section class="gl mail" aria-label="Mail" data-blok="mail"><div class="gl-in paneel">
+        <div class="kop"><h2 class="lbl">Mail</h2><span class="mono muted klein" id="mail-aantal"></span></div>
+        <div id="mail" class="lijst"></div>
+      </div></section>
+    </div>
+
+    <div class="rechts" id="plek-rechts">
+      <section class="gl kamer" aria-label="Kamer" data-blok="kamer"><div class="gl-in paneel">
+        <div class="kop">
+          <span class="lbl" id="kamer-label">Kamer</span>
+          <span class="mono kamer-temp" id="kamer-temp"></span>
+        </div>
+        <div class="kop">
+          <h2 class="kamer-naam" id="kamer-naam"></h2>
+          <button type="button" class="kamer-kies" id="kamer-kies" popovertarget="kamer-menu" aria-haspopup="true" hidden>Andere ruimte<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+        <div class="gl kamer-menu" id="kamer-menu" popover role="menu" aria-label="Kies een ruimte"></div>
+        <div id="lampen" class="lijst lampen"></div>
+      </div></section>
+
+      <section class="gl voordeur" aria-label="Camera" data-blok="camera"><div class="gl-in camera-paneel">
+        <div class="camera">
+          <img id="camera-beeld" alt="" hidden>
+          <p class="camera-leeg muted klein" id="camera-leeg">Geen beeld</p>
+          <span class="lbl camera-naam" id="camera-naam">Camera</span>
+          <button type="button" class="camera-wissel mono klein" id="camera-wissel" hidden></button>
+          <span class="chip" hidden><span class="stip"></span><span id="beweging"></span></span>
+        </div>
+      </div></section>
+    </div>
+
+    <!-- Onderin: de spraakbol (alleen als die aan staat) en één dock met favorieten en knoppen. -->
+    <div class="midden-onder" id="plek-dock">
+      <div class="spraak" data-blok="spraak">
+        <button type="button" class="orb" aria-label="Spraak, komt in fase 3" disabled></button>
+        <span class="lbl zacht">"Hey Atlas" · fase 3</span>
       </div>
+      <div class="gl pil dock" id="dock"><div class="gl-in segment dock-in">
+        <div class="dock-deel" id="dock-favorieten" data-blok="favorieten"></div>
+        <span class="dock-scheiding" id="dock-scheiding" aria-hidden="true"></span>
+        <div class="dock-deel scenes" id="scenes" data-blok="scenes"></div>
+      </div></div>
     </div>
 
-    <div class="hud" id="hud" data-blok="hud"></div>
-
-    <div class="links">
-    <section class="gl vandaag" aria-label="Vandaag" data-blok="vandaag"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">VANDAAG</h2><span class="mono muted klein" id="aantal-afspraken"></span></div>
-      <div id="agenda"></div>
-      <p class="muted klein morgen" id="morgen"></p>
-    </div></section>
-
-    <section class="gl belangrijk" aria-label="Belangrijk" data-blok="belangrijk"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">BELANGRIJK</h2></div>
-      <div id="belangrijk"></div>
-    </div></section>
+    <!-- Overzicht: drie kolommen die elk op hun eigen hoogte stapelen. -->
+    <div class="kolommen" id="kolommen">
+      <section class="kolom" id="kolom-dag" aria-labelledby="kolom-dag-kop"><h2 class="kolom-kop" id="kolom-dag-kop">Mijn dag</h2></section>
+      <section class="kolom" id="kolom-huis" aria-labelledby="kolom-huis-kop"><h2 class="kolom-kop" id="kolom-huis-kop">Huis</h2>
+        <section class="gl" aria-label="Favorieten" data-blok="favorieten" id="favorieten-blok"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Favorieten</h2></div>
+          <div class="favorieten" id="favorieten"></div>
+        </div></section>
+      </section>
+      <section class="kolom" id="kolom-media" aria-labelledby="kolom-media-kop"><h2 class="kolom-kop" id="kolom-media-kop">Media en server</h2>
+        <section class="gl app-blok" aria-label="Jellyfin" data-blok="jellyfin"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Verder kijken</h2><a class="mono klein app-link" data-app-link="jellyfin" target="_blank" rel="noopener" hidden>Jellyfin ›</a></div>
+          <div id="app-jellyfin" class="app-inhoud"><p class="muted klein">Laden…</p></div>
+        </div></section>
+        <section class="gl app-blok" aria-label="Downloads" data-blok="downloads"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Downloads</h2><a class="mono klein app-link" data-app-link="downloads" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+          <div id="app-downloads" class="app-inhoud"><p class="muted klein">Laden…</p></div>
+        </div></section>
+        <section class="gl app-blok" aria-label="Seerr" data-blok="seerr"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Aanvragen</h2><a class="mono klein app-link" data-app-link="seerr" target="_blank" rel="noopener" hidden>Seerr ›</a></div>
+          <div id="app-seerr" class="app-inhoud"><p class="muted klein">Laden…</p></div>
+        </div></section>
+        <section class="gl app-blok" aria-label="Frigate" data-blok="frigate"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Frigate</h2><a class="mono klein app-link" data-app-link="frigate" target="_blank" rel="noopener" hidden>Openen ›</a></div>
+          <div id="app-frigate" class="app-inhoud"><p class="muted klein">Laden…</p></div>
+        </div></section>
+      </section>
     </div>
-
-    <div class="rechts">
-    <section class="gl kamer" aria-label="Kamer" data-blok="kamer"><div class="gl-in paneel">
-      <div class="kop"><span class="lbl" id="kamer-label">KAMER</span><select class="kamer-keuze" id="kamer-keuze" aria-label="Kies een ruimte" hidden></select></div>
-      <div class="kop"><p class="kamer-naam" id="kamer-naam"></p><p class="mono kamer-temp" id="kamer-temp"></p></div>
-      <div id="lampen"></div>
-    </div></section>
-
-    <section class="gl" aria-label="Favorieten" data-blok="favorieten"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">FAVORIETEN</h2></div>
-      <div class="favorieten" id="favorieten"></div>
-    </div></section>
-
-    <section class="gl app-blok" aria-label="Frigate" data-blok="frigate"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">FRIGATE</h2><a class="mono klein app-link" data-app-link="frigate" target="_blank" rel="noopener" hidden>Openen ›</a></div>
-      <div id="app-frigate"><p class="muted klein">Laden…</p></div>
-    </div></section>
-    <section class="gl app-blok" aria-label="Jellyfin" data-blok="jellyfin"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">JELLYFIN</h2><a class="mono klein app-link" data-app-link="jellyfin" target="_blank" rel="noopener" hidden>Openen ›</a></div>
-      <div id="app-jellyfin"><p class="muted klein">Laden…</p></div>
-    </div></section>
-    <section class="gl app-blok" aria-label="Seerr" data-blok="seerr"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">SEERR</h2><a class="mono klein app-link" data-app-link="seerr" target="_blank" rel="noopener" hidden>Openen ›</a></div>
-      <div id="app-seerr"><p class="muted klein">Laden…</p></div>
-    </div></section>
-    <section class="gl app-blok" aria-label="Downloads" data-blok="downloads"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">DOWNLOADS</h2><a class="mono klein app-link" data-app-link="downloads" target="_blank" rel="noopener" hidden>Openen ›</a></div>
-      <div id="app-downloads"><p class="muted klein">Laden…</p></div>
-    </div></section>
-    </div>
-
-    <section class="gl mail" aria-label="Mail" data-blok="mail"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">MAIL</h2><span class="mono muted klein" id="mail-aantal"></span></div>
-      <div id="mail"></div>
-    </div></section>
-
-    <div class="midden-onder">
-      <button type="button" class="orb" aria-label="Spraak, komt in fase 3"></button>
-      <span class="lbl zacht">"HEY ATLAS" · FASE 3</span>
-      <div class="gl pil" id="scenes-pil" data-blok="scenes" hidden><div class="gl-in segment scenes" id="scenes"></div></div>
-    </div>
-
-    <section class="gl voordeur" aria-label="Camera" data-blok="camera"><div class="gl-in paneel">
-      <div class="kop"><h2 class="lbl">CAMERA</h2><button type="button" class="camera-wissel mono klein" id="camera-wissel" hidden></button></div>
-      <div class="camera">
-        <img id="camera-beeld" alt="" hidden>
-        <span class="chip" hidden><span class="stip"></span><span id="beweging"></span></span>
-        <span class="lbl zacht hoek" id="camera-naam">camera</span>
-      </div>
-    </div></section>
 
     <section class="pagina" id="pagina-apparaten" aria-label="Apparaten" hidden>
       <div class="pagina-kop">
         <input class="inst-veld pagina-zoek" id="apparaten-zoek" type="search" placeholder="Zoek een apparaat of ruimte" aria-label="Zoek een apparaat of ruimte">
-        <div class="gl pil"><div class="gl-in segment inst-chips" id="apparaten-filters"></div></div>
+        <div class="segment filters" id="apparaten-filters" role="group" aria-label="Soort apparaat"></div>
       </div>
       <div class="ruimte-kaarten" id="apparaten-lijst"></div>
     </section>
 
     <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
       <div class="camera-raster" id="cameras-lijst"></div>
-      <div class="kop"><h2 class="lbl">TERUGKIJKEN</h2></div>
+      <div class="kop"><h2 class="lbl">Terugkijken</h2></div>
       <div class="opnames" id="opnames-lijst"></div>
     </section>
+
+    <p class="voorbeeld" id="voorbeeld" hidden></p>
   </div>
 
   <dialog class="gl instellingen camera-groot" id="opname" aria-labelledby="opname-titel"><div class="gl-in paneel">
@@ -149,8 +169,6 @@
   </div></dialog>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
-
-  <p class="voorbeeld" id="voorbeeld" hidden>Voorbeeldgegevens · echte koppelingen komen in fase 2</p>
 </div>
 <script type="module" src="/src/main.ts"></script>
 </body>

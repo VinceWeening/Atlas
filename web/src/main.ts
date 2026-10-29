@@ -3,6 +3,7 @@ import { lagen, type Ruimte } from './huis';
 import { instellingen, type Instellingen } from './instellingen';
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { maakApparaten, maakCameras } from './paginas';
+import { meldFout, post } from './melding';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -58,6 +59,8 @@ const staat = {
   scherm: 'thuis' as Scherm,
   /** Het huis is uitgezet, maar tijdelijk naar voren gehaald met de huisknop. */
   huisVoor: false,
+  /** Lampen en apparaten waarvan een opdracht onderweg is; hun schakelaar staat dan even op wachten. */
+  bezig: new Set<string>(),
 };
 
 function tekst(el: HTMLElement, waarde: string) {
@@ -81,7 +84,7 @@ function tikKlok() {
   tekst($('tijd'), nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }));
   tekst($('datum'), datumFormaat.format(nu));
   const deel = (nu.getHours() * 60 + nu.getMinutes()) / 1440;
-  $('dagboog').setAttribute('stroke-dasharray', `${Math.round(503 * deel)} 503`);
+  $('dagboog').setAttribute('stroke-dasharray', `${Math.round(478 * deel)} 478`);
 }
 
 // Koppeling tussen de plattegrond en de ruimtes in Home Assistant, op naam.
@@ -188,7 +191,6 @@ function tekenKnoppen() {
       knop.addEventListener('click', () => kiesVerdieping(o.id));
       return knop;
     }),
-    maak('span', 'rail-hint', 'scroll'),
   );
   document.querySelectorAll<HTMLButtonElement>('[data-modus]').forEach((knop) => {
     knop.setAttribute('aria-pressed', String(knop.dataset.modus === staat.modus));
@@ -197,19 +199,17 @@ function tekenKnoppen() {
 
 async function zetLamp(lamp: Lamp, aan: boolean) {
   lamp.aan = aan; // meteen tonen, de volgende ronde van Home Assistant bevestigt het
+  staat.bezig.add(lamp.id);
   tekenAlles();
   try {
-    const antwoord = await fetch(`/api/lamp/${encodeURIComponent(lamp.id)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ aan }),
-    });
-    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    await post(`/api/lamp/${encodeURIComponent(lamp.id)}`, { aan });
   } catch (fout) {
     console.error('Lamp schakelen mislukt', fout);
+    meldFout(`${lamp.naam} reageert niet`);
     lamp.aan = !aan;
-    tekenAlles();
   }
+  staat.bezig.delete(lamp.id);
+  tekenAlles();
   setTimeout(laadHuis, 600);
 }
 
@@ -220,12 +220,14 @@ function lampRij(lamp: Lamp) {
   const status = !lamp.bereikbaar ? 'Niet bereikbaar' : lamp.aan ? (lamp.helderheid != null ? `Aan · ${lamp.helderheid}%` : 'Aan') : 'Uit';
   namen.append(lamp.naam, maak('small', undefined, status));
   info.append(namen);
-  const schakelaar = maak('button', 'schakelaar');
+  // Lampen krijgen een warme schakelaar; warm betekent in Atlas altijd "licht aan".
+  const schakelaar = maak('button', 'schakelaar warm');
   schakelaar.type = 'button';
   schakelaar.setAttribute('role', 'switch');
   schakelaar.setAttribute('aria-checked', String(lamp.aan));
   schakelaar.setAttribute('aria-label', `${lamp.naam} ${lamp.aan ? 'uitzetten' : 'aanzetten'}`);
-  schakelaar.disabled = !lamp.bereikbaar;
+  schakelaar.setAttribute('aria-busy', String(staat.bezig.has(lamp.id)));
+  schakelaar.disabled = !lamp.bereikbaar || staat.bezig.has(lamp.id);
   schakelaar.addEventListener('click', () => zetLamp(lamp, !lamp.aan));
   rij.append(info, schakelaar);
   const schuiven = lampSchuiven(lamp, () => setTimeout(laadHuis, 400));
@@ -239,26 +241,36 @@ function tekenKamer() {
   const kamer = staat.kamer && staat.kamer !== LOS ? huis?.kamers.find((k) => k.id === staat.kamer) : undefined;
   const los = staat.kamer === LOS;
 
-  // Keuzelijst met alle ruimtes uit Home Assistant, zodat ook ruimtes buiten de plattegrond bereikbaar zijn.
-  const keuze = $<HTMLSelectElement>('kamer-keuze');
+  // Menu met alle ruimtes uit Home Assistant, zodat ook ruimtes buiten de plattegrond bereikbaar zijn. Een klik op een
+  // kamer in het huis doet hetzelfde.
+  const menu = $('kamer-menu');
   const opties = [
-    ...(huis?.kamers ?? []).filter((k) => k.lampen.length || k.temperatuur != null).map((k) => [k.id, k.naam]),
-    ...(huis?.losseLampen.length ? [[LOS, 'Overige lampen']] : []),
+    ...(huis?.kamers ?? []).filter((k) => k.lampen.length || k.temperatuur != null).map((k) => [k.id, k.naam, k.verdieping ?? '']),
+    ...(huis?.losseLampen.length ? [[LOS, 'Overige lampen', '']] : []),
   ];
-  // Alleen opnieuw opbouwen als de ruimtes veranderen, anders klapt een open keuzelijst elke ronde dicht.
-  const sleutel = JSON.stringify(opties);
-  if (keuze.dataset.sleutel !== sleutel) {
-    keuze.dataset.sleutel = sleutel;
-    keuze.replaceChildren(
-      Object.assign(maak('option', undefined, 'Kies een ruimte'), { value: '' }),
-      ...opties.map(([id, naam]) => Object.assign(maak('option', undefined, naam), { value: id })),
+  // Alleen opnieuw opbouwen als de ruimtes veranderen, anders klapt een open menu elke ronde dicht.
+  const sleutel = JSON.stringify([opties, staat.kamer]);
+  if (menu.dataset.sleutel !== sleutel) {
+    menu.dataset.sleutel = sleutel;
+    menu.replaceChildren(
+      ...opties.map(([id, naam, verdieping]) => {
+        const knop = maak('button', 'menu-knop');
+        knop.type = 'button';
+        knop.setAttribute('role', 'menuitemradio');
+        knop.setAttribute('aria-checked', String(id === staat.kamer));
+        knop.append(maak('span', undefined, naam), maak('span', 'muted klein', verdieping));
+        knop.addEventListener('click', () => {
+          menu.hidePopover();
+          kiesKamer(id);
+        });
+        return knop;
+      }),
     );
   }
-  keuze.value = staat.kamer ?? '';
-  keuze.hidden = opties.length === 0;
+  $('kamer-kies').hidden = opties.length < 2;
 
   const verdieping = kamer ? kamer.verdieping : los ? 'Huis' : ruimte?.laag;
-  tekst($('kamer-label'), verdieping ? `KAMER · ${verdieping.toUpperCase()}` : 'KAMER');
+  tekst($('kamer-label'), verdieping ?? 'Kamer');
   tekst($('kamer-naam'), los ? 'Overige lampen' : (kamer?.naam ?? ruimte?.naam ?? ''));
   tekst($('kamer-temp'), kamer?.temperatuur != null ? graden(kamer.temperatuur) : '');
 
@@ -281,108 +293,129 @@ function tekenHud() {
   const huis = staat.huis;
   const lampen = huis ? [...huis.kamers.flatMap((k) => k.lampen), ...huis.losseLampen] : [];
   const camera = huis?.cameras[0];
+  const aan = lampen.filter((l) => l.aan).length;
   $('hud').replaceChildren(
-    maak('span', undefined, `BINNEN ${huis?.binnen != null ? graden(huis.binnen) : '--'}`),
-    maak('span', 'warm', `LAMPEN ${lampen.filter((l) => l.aan).length} / ${lampen.length} AAN`),
-    maak('span', undefined, `${(camera?.naam ?? 'Voordeur').toUpperCase()} ${camera?.beweging ? uur(camera.beweging) : '--:--'}`),
+    ...(huis?.binnen != null ? [maak('span', 'hud-chip mono', `${huis.binnen.toLocaleString('nl-NL', { maximumFractionDigits: 1 })}° binnen`)] : []),
+    ...(lampen.length ? [maak('span', 'hud-chip mono' + (aan ? ' warm' : ''), `${aan}/${lampen.length} lampen`)] : []),
+    ...(camera?.beweging ? [maak('span', 'hud-chip mono', `${camera.naam.toLowerCase()} ${uur(camera.beweging)}`)] : []),
   );
 }
 
 async function bedienApparaat(a: Apparaat, aan: boolean) {
   if (a.bediening === 'schakel') a.aan = aan; // meteen tonen
+  staat.bezig.add(a.id);
   tekenFavorieten();
   tekenScenes();
   try {
-    const antwoord = await fetch(`/api/apparaat/${encodeURIComponent(a.id)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ aan }),
-    });
-    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    await post(`/api/apparaat/${encodeURIComponent(a.id)}`, { aan });
   } catch (fout) {
     console.error('Bedienen mislukt', fout);
+    meldFout(`${a.naam} reageert niet`);
     if (a.bediening === 'schakel') a.aan = !aan;
   }
+  staat.bezig.delete(a.id);
+  tekenFavorieten();
+  tekenScenes();
   setTimeout(() => {
     laadApparaten();
     laadHuis();
   }, 700);
 }
 
+/** Knop in het dock onderin. Een brandende lamp of aan staande schakelaar licht warm op. */
+function dockKnop(naam: string, aan: boolean | null, klik: () => void, opties: { bereikbaar?: boolean; lamp?: boolean } = {}) {
+  const knop = maak('button', 'dock-knop' + (aan ? ' aan' : ''));
+  knop.type = 'button';
+  if (opties.lamp) knop.append(maak('span', 'dock-lamp'));
+  knop.append(naam);
+  if (aan != null) knop.setAttribute('aria-pressed', String(aan));
+  knop.disabled = opties.bereikbaar === false;
+  knop.addEventListener('click', klik);
+  return knop;
+}
+
+/** Laat even zien dat een scène of script gestart is. */
+function flits(knop: HTMLElement) {
+  knop.classList.add('gestart');
+  setTimeout(() => knop.classList.remove('gestart'), 1200);
+}
+
 /** De knoppen onderin: zelf gekozen in Apparaten of het tandwiel, en anders alle scènes. */
 function tekenScenes() {
   const gekozen = staat.inst?.snelkoppelingen ?? [];
+  let knoppen: HTMLElement[];
   if (gekozen.length) {
-    const knoppen = gekozen.map((id) => staat.apparaten?.find((a) => a.id === id)).filter((a): a is Apparaat => !!a);
-    $('scenes-pil').hidden = knoppen.length === 0;
-    $('scenes').replaceChildren(
-      ...knoppen.map((a) => {
-        const knop = maak('button', a.bediening === 'schakel' && a.aan ? 'actief-warm' : undefined, a.naam);
-        knop.type = 'button';
-        if (a.bediening === 'schakel') knop.setAttribute('aria-pressed', String(!!a.aan));
-        knop.disabled = !a.bereikbaar;
-        knop.addEventListener('click', () => {
-          if (a.bediening === 'start') {
-            knop.classList.add('actief-warm');
-            setTimeout(() => knop.classList.remove('actief-warm'), 1200);
-          }
+    knoppen = gekozen
+      .map((id) => staat.apparaten?.find((a) => a.id === id))
+      .filter((a): a is Apparaat => !!a)
+      .map((a) => {
+        const knop = dockKnop(a.naam, a.bediening === 'schakel' ? !!a.aan : null, () => {
+          if (a.bediening === 'start') flits(knop);
           bedienApparaat(a, a.bediening === 'start' ? true : !a.aan);
-        });
+        }, { bereikbaar: a.bereikbaar && !staat.bezig.has(a.id) });
         return knop;
-      }),
-    );
-    return;
-  }
-  const scenes = staat.huis?.scenes ?? [];
-  $('scenes-pil').hidden = scenes.length === 0;
-  $('scenes').replaceChildren(
-    ...scenes.map((s) => {
-      const knop = maak('button', undefined, s.naam);
-      knop.type = 'button';
-      knop.addEventListener('click', async () => {
-        knop.classList.add('actief-warm');
+      });
+  } else {
+    knoppen = (staat.huis?.scenes ?? []).map((sc) => {
+      const knop = dockKnop(sc.naam, null, async () => {
+        flits(knop);
         try {
-          await fetch(`/api/scene/${encodeURIComponent(s.id)}`, { method: 'POST' });
-        } finally {
-          setTimeout(() => knop.classList.remove('actief-warm'), 1200);
-          setTimeout(laadHuis, 800);
+          await post(`/api/scene/${encodeURIComponent(sc.id)}`);
+        } catch (fout) {
+          console.error('Scène starten mislukt', fout);
+          meldFout(`${sc.naam} lukte niet`);
         }
+        setTimeout(laadHuis, 800);
       });
       return knop;
+    });
+  }
+  $('scenes').replaceChildren(...knoppen);
+  tekenDock();
+}
+
+/** Favorieten: in het dock op Thuis (alleen aan/uit), en als kaart met schuifjes op Overzicht. */
+function tekenFavorieten() {
+  const ids = staat.inst?.favorieten ?? [];
+  const lijst = staat.apparaten ? ids.map((id) => staat.apparaten!.find((a) => a.id === id)).filter((a): a is Apparaat => !!a) : [];
+  // Zonder favorieten verdwijnt de kaart; een ster bij Apparaten zet ze erop.
+  $('favorieten-blok').classList.toggle('leeg', lijst.length === 0);
+  $('dock-favorieten').replaceChildren(
+    ...lijst.map((a) =>
+      dockKnop(a.naam, a.bediening === 'schakel' ? !!a.aan : null, () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan), {
+        bereikbaar: a.bereikbaar && !staat.bezig.has(a.id),
+        lamp: a.soort === 'light',
+      }),
+    ),
+  );
+  tekenDock();
+  if (schuiftNu() && $('favorieten').querySelector('input[type=range]')) return;
+  $('favorieten').replaceChildren(
+    ...lijst.map((a) => {
+      const vak = maak('div', 'favoriet-vak' + (a.aan ? ' aan' : ''));
+      const tegel = maak('button', 'favoriet' + (a.aan ? ' aan' : ''));
+      tegel.type = 'button';
+      tegel.disabled = !a.bereikbaar || staat.bezig.has(a.id);
+      if (a.bediening === 'schakel') tegel.setAttribute('aria-pressed', String(!!a.aan));
+      tegel.append(maak('span', 'favoriet-lamp'), maak('strong', undefined, a.naam), maak('span', 'muted klein', a.bereikbaar ? a.tekst || 'Starten' : 'Niet bereikbaar'));
+      tegel.addEventListener('click', () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan));
+      vak.append(tegel);
+      // Bij een brandende dimbare lamp meteen een schuifje voor de helderheid.
+      const schuiven = a.aan ? lampSchuiven({ ...a, lamp: a.lamp && { ...a.lamp, kleurtemp: null } }, () => setTimeout(laadApparaten, 400)) : null;
+      if (schuiven) vak.append(schuiven);
+      return vak;
     }),
   );
 }
 
-function tekenFavorieten() {
-  const ids = staat.inst?.favorieten ?? [];
-  if (schuiftNu() && $('favorieten').querySelector('input[type=range]')) return;
-  if (!ids.length) {
-    $('favorieten').replaceChildren(maak('p', 'muted klein', 'Geef lampen een ster bij Apparaten, dan staan ze hier.'));
-    return;
-  }
-  if (!staat.apparaten) {
-    $('favorieten').replaceChildren(maak('p', 'muted klein', 'Laden…'));
-    return;
-  }
-  $('favorieten').replaceChildren(
-    ...ids
-      .map((id) => staat.apparaten!.find((a) => a.id === id))
-      .filter((a): a is Apparaat => !!a)
-      .map((a) => {
-        const vak = maak('div', 'favoriet-vak' + (a.aan ? ' aan' : ''));
-        const tegel = maak('button', 'favoriet' + (a.aan ? ' aan' : ''));
-        tegel.type = 'button';
-        tegel.disabled = !a.bereikbaar;
-        if (a.bediening === 'schakel') tegel.setAttribute('aria-pressed', String(!!a.aan));
-        tegel.append(maak('span', 'favoriet-lamp'), maak('strong', undefined, a.naam), maak('span', 'muted klein', a.bereikbaar ? a.tekst || 'Starten' : 'Niet bereikbaar'));
-        tegel.addEventListener('click', () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan));
-        vak.append(tegel);
-        // Bij een brandende dimbare lamp meteen een schuifje voor de helderheid.
-        const schuiven = a.aan ? lampSchuiven({ ...a, lamp: a.lamp && { ...a.lamp, kleurtemp: null } }, () => setTimeout(laadApparaten, 400)) : null;
-        if (schuiven) vak.append(schuiven);
-        return vak;
-      }),
-  );
+/** Het dock verdwijnt als er niets in staat, en het streepje alleen als er aan beide kanten iets staat. */
+function tekenDock() {
+  const blokken = staat.inst?.blokken ?? {};
+  // Op Overzicht staan de favorieten als kaart, niet in het dock.
+  const fav = blokken.favorieten !== false && staat.scherm !== 'overzicht' && $('dock-favorieten').childElementCount > 0;
+  const knoppen = blokken.scenes !== false && $('scenes').childElementCount > 0;
+  $('dock-scheiding').hidden = !(fav && knoppen);
+  $('dock').hidden = !fav && !knoppen;
 }
 
 async function laadApparaten() {
@@ -411,24 +444,49 @@ async function wisselLijst(lijst: 'favorieten' | 'snelkoppelingen', id: string) 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ [lijst]: nieuw }),
     });
-    if (antwoord.ok) zetInst(await antwoord.json());
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    zetInst(await antwoord.json());
   } catch (fout) {
     console.error('Bewaren mislukt', fout);
+    meldFout('Bewaren lukte niet');
+  }
+}
+
+/** Eigen naam voor een apparaat; een lege naam zet de naam uit Home Assistant terug. */
+async function hernoem(id: string, naam: string) {
+  try {
+    const antwoord = await fetch('/api/instellingen', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ namen: { [id]: naam } }),
+    });
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    zetInst(await antwoord.json());
+    laadHuis();
+    laadApparaten();
+  } catch (fout) {
+    console.error('Naam bewaren mislukt', fout);
+    meldFout('Naam bewaren lukte niet');
   }
 }
 
 let cameraGetoond = '';
+/** Tijd van het laatste beeld dat wel binnenkwam, zodat een haperende camera een oud beeld met tijd laat zien. */
+let laatsteBeeld: number | null = null;
 function tekenCamera(verversen = false) {
   const cameras = staat.huis?.cameras ?? [];
   const camera = cameras[staat.camera % Math.max(cameras.length, 1)];
   const wissel = $<HTMLButtonElement>('camera-wissel');
   wissel.hidden = cameras.length < 2;
-  tekst(wissel, camera ? `${camera.naam} ›` : '');
-  tekst($('camera-naam'), camera?.naam ?? 'camera');
+  tekst(wissel, `${(staat.camera % Math.max(cameras.length, 1)) + 1}/${cameras.length} ›`);
+  wissel.setAttribute('aria-label', 'Volgende camera');
+  tekst($('camera-naam'), camera?.naam ?? 'Camera');
   const beeld = $<HTMLImageElement>('camera-beeld');
   if (!camera || staat.huis?.bron !== 'home-assistant') {
     beeld.hidden = true;
+    tekst($('camera-leeg'), !camera ? 'Geen camera gevonden' : 'Voorbeeld, geen camerabeeld');
   } else if (verversen || cameraGetoond !== camera.id) {
+    if (cameraGetoond !== camera.id) laatsteBeeld = null;
     cameraGetoond = camera.id;
     beeld.alt = `Camerabeeld ${camera.naam}`;
     beeld.src = `/api/camera/${encodeURIComponent(camera.id)}?t=${Date.now()}`;
@@ -440,14 +498,18 @@ function tekenCamera(verversen = false) {
 
 function tekenWeer() {
   const weer = staat.huis?.weer ?? staat.overzicht?.weer;
-  tekst($('weer'), weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)} °C ` : ''}${weer.omschrijving.toLowerCase()}` : '');
+  tekst($('weer'), weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '');
 }
 
+/** Een regel onderin, alleen zolang iets echt nog voorbeeld is. */
 function tekenOpmerking() {
   const opmerking = $('voorbeeld');
-  if (staat.huis?.bron === 'voorbeeld') tekst(opmerking, 'Voorbeeldgegevens · stel Home Assistant in om je eigen huis te zien');
-  else tekst(opmerking, 'Agenda en mail zijn nog voorbeeld · koppel Google via het tandwiel');
-  opmerking.hidden = !staat.overzicht?.voorbeeld && staat.huis?.bron !== 'voorbeeld';
+  const huis = staat.huis?.bron === 'voorbeeld';
+  const google = !!staat.overzicht?.voorbeeld;
+  if (huis && google) tekst(opmerking, 'Voorbeeldgegevens · stel Home Assistant in en koppel Google via het tandwiel');
+  else if (huis) tekst(opmerking, 'Het huis is voorbeeld · stel Home Assistant in om je eigen huis te zien');
+  else tekst(opmerking, 'Agenda en mail zijn voorbeeld · koppel Google via het tandwiel');
+  opmerking.hidden = !huis && !google;
 }
 
 function tekenAlles() {
@@ -461,6 +523,22 @@ function tekenAlles() {
   tekenOpmerking();
 }
 
+// Waar de blokken staan. Op Thuis staan ze rond het huis; op Overzicht in drie kolommen die elk op hun eigen hoogte
+// stapelen, zodat er geen gaten vallen.
+const THUIS: [string, string[]][] = [
+  ['plek-links', ['vandaag', 'belangrijk', 'mail']],
+  ['plek-rechts', ['kamer', 'camera']],
+];
+const OVERZICHT: [string, string[]][] = [
+  ['kolom-dag', ['vandaag', 'belangrijk', 'mail']],
+  ['kolom-huis', ['camera', 'kamer', 'favorieten', 'dock']],
+];
+function zetBlokken(overzicht: boolean) {
+  const blok = (id: string) => (id === 'dock' ? $('dock') : document.querySelector<HTMLElement>(`.stage [data-blok="${id}"]:not(.dock-deel)`)!);
+  for (const [plek, ids] of overzicht ? OVERZICHT : THUIS) for (const id of ids) $(plek).append(blok(id));
+  if (!overzicht) $('plek-dock').append($('dock'));
+}
+
 // Schermen en blokken uit het tandwiel.
 function pasToe() {
   const blokken = staat.inst?.blokken ?? {};
@@ -470,6 +548,7 @@ function pasToe() {
   const huisUit = blokken.huis === false;
   const achter = overzicht || pagina || (huisUit && !staat.huisVoor);
   const app = document.querySelector('.app')!;
+  if (app.classList.contains('overzicht') !== overzicht) zetBlokken(overzicht);
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
   $('pagina-apparaten').hidden = staat.scherm !== 'apparaten';
@@ -481,16 +560,24 @@ function pasToe() {
     cameraScherm.laadOpnames();
   }
   app.classList.toggle('huis-achter', achter);
-  $('huis-knop-pil').hidden = pagina || (!achter && !(huisUit && staat.huisVoor));
+  // De huisknop staat er alleen als het huis uit staat: dan haal je het ermee naar voren.
+  $('huis-knop').hidden = !huisUit || pagina || overzicht;
   $('huis-knop').setAttribute('aria-pressed', String(!achter));
   $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
-  tekst($('scherm-label'), `ATLAS · ${{ thuis: 'THUIS', overzicht: 'OVERZICHT', apparaten: 'APPARATEN', cameras: "CAMERA'S" }[staat.scherm]}`);
-  document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.scherm === staat.scherm)));
+  document.title = `Atlas · ${{ thuis: 'Thuis', overzicht: 'Overzicht', apparaten: 'Apparaten', cameras: "Camera's" }[staat.scherm]}`;
+  document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => {
+    const gekozen = k.dataset.scherm === staat.scherm;
+    k.setAttribute('aria-pressed', String(gekozen));
+    if (gekozen) k.setAttribute('aria-current', 'page');
+    else k.removeAttribute('aria-current');
+  });
+  tekenDock();
 }
 
 const apparaten = maakApparaten(() => laadHuis(), {
   heeft: (lijst, id) => !!staat.inst?.[lijst].includes(id),
   wissel: wisselLijst,
+  hernoem,
 });
 const cameraScherm = maakCameras();
 setInterval(() => {
@@ -506,8 +593,10 @@ const korteDatum = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'nu
 function tekenBelangrijk() {
   const vandaag = middag(new Date().toLocaleDateString('sv-SE'));
   const lijst = (staat.inst?.belangrijk ?? []).filter((d) => middag(d.datum) >= vandaag).slice(0, 4);
+  // Zonder data verdwijnt het blok; data toevoegen gaat via het tandwiel.
+  document.querySelector('.stage [data-blok="belangrijk"]')!.classList.toggle('leeg', lijst.length === 0);
   if (lijst.length === 0) {
-    $('belangrijk').replaceChildren(maak('p', 'muted klein', 'Voeg data toe via het tandwiel.'));
+    $('belangrijk').replaceChildren();
     return;
   }
   $('belangrijk').replaceChildren(
@@ -694,7 +783,8 @@ function tekenApps(a: Apps) {
         rij.append(plaatje(m.beeld, 'poster'), tekstDeel);
         inhoud.push(rij);
       }
-      if (j.nieuw?.length) {
+      // Nieuwe titels alleen als er niets is om verder te kijken; anders wordt het blok te druk.
+      if (j.nieuw?.length && !inhoud.length) {
         inhoud.push(maak('p', 'inst-label', 'Nieuw'));
         const rij = maak('div', 'posters');
         for (const m of j.nieuw.slice(0, 5)) {
@@ -718,14 +808,14 @@ function tekenApps(a: Apps) {
     else if (!z.sleutel) inhoud = melding('Seerr draait. Vul SEERR_KEY in bij Atlas in ZimaOS om je aanvragen te zien.');
     else if (!z.bereikbaar) inhoud = melding('Seerr reageert niet. Klopt SEERR_KEY?');
     else {
-      const tegels = maak('div', 'tegels');
+      const tegels = maak('div', 'tellers');
       for (const [n, naam, warm] of [
         [z.wachtend ?? 0, 'wachten', true],
         [z.bezig ?? 0, 'bezig', false],
         [z.beschikbaar ?? 0, 'beschikbaar', false],
       ] as const) {
-        const t = maak('div', 'tegel' + (warm && n > 0 ? ' warm' : ''));
-        t.append(maak('span', 'mono tegel-getal', String(n)), maak('span', 'muted klein', naam));
+        const t = maak('span', 'teller' + (warm && n > 0 ? ' warm' : ''));
+        t.append(maak('span', 'mono', String(n)), ` ${naam}`);
         tegels.append(t);
       }
       inhoud = [tegels];
@@ -902,18 +992,60 @@ $('huis').addEventListener(
   },
   { passive: false },
 );
-$<HTMLSelectElement>('kamer-keuze').addEventListener('change', (e) => {
-  const id = (e.target as HTMLSelectElement).value || null;
+// Het ruimtemenu onder de knop zetten, rechts uitgelijnd, en boven de knop als er onder geen plek is.
+$('kamer-menu').addEventListener('toggle', (e) => {
+  if ((e as ToggleEvent).newState !== 'open') return;
+  const knop = $('kamer-kies').getBoundingClientRect();
+  const menu = $('kamer-menu');
+  const hoog = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(knop.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${knop.bottom + 8 + hoog > innerHeight ? Math.max(8, knop.top - 8 - hoog) : knop.bottom + 8}px`;
+});
+function kiesKamer(id: string | null) {
   staat.kamer = id;
   staat.gekozen = id && id !== LOS ? (ruimteBij(id)?.id ?? null) : null;
   tekenAlles();
-});
+}
 $('camera-wissel').addEventListener('click', () => {
   staat.camera += 1;
   tekenCamera();
 });
-$<HTMLImageElement>('camera-beeld').addEventListener('load', (e) => ((e.target as HTMLImageElement).hidden = false));
-$<HTMLImageElement>('camera-beeld').addEventListener('error', (e) => ((e.target as HTMLImageElement).hidden = true));
+$<HTMLImageElement>('camera-beeld').addEventListener('load', (e) => {
+  (e.target as HTMLImageElement).hidden = false;
+  laatsteBeeld = Date.now();
+  $('camera-leeg').hidden = true;
+});
+// Lukt een nieuw beeld niet, dan blijft het vorige staan met de tijd erbij; is er nog nooit een beeld geweest, dan een
+// rustige tekst in plaats van een leeg vlak.
+$<HTMLImageElement>('camera-beeld').addEventListener('error', (e) => {
+  const beeld = e.target as HTMLImageElement;
+  const leeg = $('camera-leeg');
+  leeg.hidden = false;
+  if (laatsteBeeld == null) {
+    beeld.hidden = true;
+    tekst(leeg, 'Geen beeld van deze camera');
+  } else tekst(leeg, `Laatste beeld ${new Date(laatsteBeeld).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`);
+});
+
+// Sneltoetsen: 1 t/m 4 voor de schermen, pijltjes voor de verdiepingen op Thuis. Uit te zetten in het tandwiel.
+const SCHERMEN: Scherm[] = ['thuis', 'overzicht', 'apparaten', 'cameras'];
+document.addEventListener('keydown', (e) => {
+  if (staat.inst?.blokken.sneltoetsen === false || e.ctrlKey || e.metaKey || e.altKey) return;
+  const doel = e.target as HTMLElement;
+  if (doel.closest('input, select, textarea, [contenteditable], dialog[open]') || document.querySelector('dialog[open]')) return;
+  const nummer = Number(e.key);
+  if (nummer >= 1 && nummer <= SCHERMEN.length) {
+    staat.scherm = SCHERMEN[nummer - 1];
+    staat.huisVoor = false;
+    pasToe();
+    e.preventDefault();
+  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && staat.scherm === 'thuis' && !document.querySelector('.app.huis-achter')) {
+    const nu = VERDIEPINGEN.indexOf(staat.verdieping);
+    const volgende = Math.max(0, Math.min(VERDIEPINGEN.length - 1, nu + (e.key === 'ArrowDown' ? 1 : -1)));
+    if (volgende !== nu) kiesVerdieping(VERDIEPINGEN[volgende]);
+    e.preventDefault();
+  }
+});
 
 document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((knop) => {
   knop.addEventListener('click', () => {

@@ -1,9 +1,10 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
-const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads'];
+// De spraakbol doet pas iets in fase 3, dus die staat tot dan uit.
+const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads', 'spraak'];
 type Blok = (typeof BLOKKEN)[number];
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
@@ -35,6 +36,8 @@ export type Instellingen = {
   favorieten: string[];
   /** Knoppen onderin; leeg betekent alle scènes uit Home Assistant. */
   snelkoppelingen: string[];
+  /** Eigen namen voor apparaten, op entiteit. Gaan voor de naam uit Home Assistant. */
+  namen: Record<string, string>;
 };
 
 const standaard: Instellingen = {
@@ -44,6 +47,7 @@ const standaard: Instellingen = {
   meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2, zones: [], bekenden: [] },
   favorieten: [],
   snelkoppelingen: [],
+  namen: {},
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
@@ -52,6 +56,7 @@ huidig.blokken = { ...standaard.blokken, ...huidig.blokken };
 huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
 huidig.favorieten ??= [];
 huidig.snelkoppelingen ??= [];
+huidig.namen ??= {};
 
 export const instellingen = () => huidig;
 
@@ -94,6 +99,16 @@ export function zetInstellingen(nieuw: unknown): string | null {
     if (w === undefined) continue;
     if (!Array.isArray(w) || w.length > 30 || w.some((e) => typeof e !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(e))) return 'Ongeldige lijst met apparaten';
     volgende[lijst] = [...new Set(w as string[])];
+  }
+  if (n.namen !== undefined) {
+    // Alleen de namen die meekomen veranderen; een lege naam haalt de eigen naam weg.
+    if (!n.namen || typeof n.namen !== 'object' || Array.isArray(n.namen)) return 'Ongeldige namen';
+    for (const [id, naam] of Object.entries(n.namen)) {
+      if (!/^[a-z_]+\.[a-z0-9_]+$/.test(id) || typeof naam !== 'string' || naam.length > 60) return 'Ongeldige naam';
+      if (naam.trim()) volgende.namen[id] = naam.trim();
+      else delete volgende.namen[id];
+    }
+    if (Object.keys(volgende.namen).length > 500) return 'Te veel eigen namen';
   }
   if (n.meldingen !== undefined) {
     const m = n.meldingen as Partial<Meldingen>;
