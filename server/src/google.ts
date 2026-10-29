@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { bewaar, lees } from './opslag.js';
 
 export type Afspraak = { tijd: string; titel: string; detail: string; kleur: string | null };
-export type Mail = { van: string; onderwerp: string; link: string };
+export type Mail = { van: string; onderwerp: string; stukje: string; tijd: string | null; link: string };
 export type Agenda = { id: string; naam: string; kleur: string | null; aan: boolean };
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/gmail.readonly'];
@@ -181,12 +181,18 @@ export class Google {
       const mail = await Promise.all(
         (lijst.messages ?? []).map(async (m) => {
           const kop = new URLSearchParams([['format', 'metadata'], ['metadataHeaders', 'From'], ['metadataHeaders', 'Subject']]);
-          const bericht = await this.vraag<{ payload: { headers: { name: string; value: string }[] } }>(
+          const bericht = await this.vraag<{ payload: { headers: { name: string; value: string }[] }; snippet?: string; internalDate?: string }>(
             `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?${kop}`,
           );
           const veld = (naam: string) => bericht.payload.headers.find((h) => h.name.toLowerCase() === naam)?.value ?? '';
           const van = veld('from').replace(/\s*<[^>]*>\s*$/, '').replace(/^"(.*)"$/, '$1') || veld('from');
-          return { van, onderwerp: veld('subject') || '(geen onderwerp)', link: `https://mail.google.com/mail/u/0/#inbox/${m.threadId}` };
+          return {
+            van,
+            onderwerp: veld('subject') || '(geen onderwerp)',
+            stukje: (bericht.snippet ?? '').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').slice(0, 140),
+            tijd: bericht.internalDate ? new Date(Number(bericht.internalDate)).toISOString() : null,
+            link: `https://mail.google.com/mail/u/0/#inbox/${m.threadId}`,
+          };
         }),
       );
       return { mail, aantal: lijst.resultSizeEstimate ?? mail.length };

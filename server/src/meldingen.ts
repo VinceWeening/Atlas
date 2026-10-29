@@ -101,7 +101,29 @@ export class Meldingen {
   /** Een melding om te zien of pc en telefoon goed staan. Geeft terug wat er met de telefoon gebeurde. */
   async test() {
     const nu = new Date();
-    return this.verstuur({ id: `test-${nu.getTime()}`, camera: 'test', soort: 'test', titel: 'Testmelding van Atlas', tekst: `Alles werkt · ${uur(nu)}`, tijd: nu.toISOString(), beeld: null }, true);
+    // Zo echt mogelijk: een persoon bij de voordeur, met het huidige beeld van die camera als Frigate er is.
+    const cameras = await this.frigateCameras().catch(() => [] as string[]);
+    const camera = cameras.find((c) => /voor|deur|bel|door/i.test(c)) ?? cameras[0] ?? null;
+    return this.verstuur(
+      {
+        id: `test-${nu.getTime()}`,
+        camera: camera ?? 'voordeur',
+        soort: 'person',
+        titel: `Persoon bij ${cameraNaam(camera ?? 'voordeur')}`,
+        tekst: `Testmelding · ${uur(nu)}`,
+        tijd: nu.toISOString(),
+        beeld: camera ? `/api/meldingen/camera/${encodeURIComponent(camera)}/beeld` : null,
+      },
+      true,
+    );
+  }
+
+  /** Het huidige beeld van een Frigate-camera. */
+  async cameraBeeld(camera: string) {
+    if (!this.frigate.adres || !/^[\w-]{1,64}$/.test(camera)) return null;
+    const antwoord = await fetch(`${this.frigate.adres}/api/${camera}/latest.jpg?h=480`, { signal: AbortSignal.timeout(8000) });
+    if (!antwoord.ok) return null;
+    return { type: antwoord.headers.get('content-type') ?? 'image/jpeg', data: Buffer.from(await antwoord.arrayBuffer()) };
   }
 
   private async kijk() {
