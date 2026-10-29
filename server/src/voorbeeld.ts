@@ -42,6 +42,12 @@ export class VoorbeeldHuis {
     return this.staat;
   }
 
+  async toestellen() {
+    return [];
+  }
+
+  async melding(_toestel: string, _titel: string, _tekst: string) {}
+
   async bestaat(entiteit: string) {
     return this.alleLampen().some((l) => l.id === entiteit) || this.staat.scenes.some((s) => s.id === entiteit);
   }

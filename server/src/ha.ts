@@ -5,6 +5,7 @@ export type Lamp = { id: string; naam: string; aan: boolean; helderheid: number 
 export type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 export type Camera = { id: string; naam: string; kamer: string | null; beweging: string | null };
 export type Scene = { id: string; naam: string };
+export type Toestel = { id: string; naam: string };
 export type Huis = {
   bron: 'home-assistant' | 'voorbeeld';
   kamers: Kamer[];
@@ -174,5 +175,21 @@ export class HomeAssistant {
   async cameraBeeld(entiteit: string) {
     const antwoord = await this.vraag(`/api/camera_proxy/${entiteit}`);
     return { type: antwoord.headers.get('content-type') ?? 'image/jpeg', data: Buffer.from(await antwoord.arrayBuffer()) };
+  }
+
+  /** Telefoons met de Home Assistant-app: dat zijn de notify-diensten die met mobile_app_ beginnen. */
+  async toestellen(): Promise<Toestel[]> {
+    const diensten = (await (await this.vraag('/api/services')).json()) as { domain: string; services: Record<string, unknown> }[];
+    const notify = diensten.find((d) => d.domain === 'notify');
+    return Object.keys(notify?.services ?? {})
+      .filter((id) => id.startsWith('mobile_app_'))
+      .map((id) => ({ id, naam: id.slice('mobile_app_'.length).replace(/_/g, ' ') }));
+  }
+
+  async melding(toestel: string, titel: string, tekst: string) {
+    await this.vraag(`/api/services/notify/${toestel}`, {
+      method: 'POST',
+      body: JSON.stringify({ title: titel, message: tekst, data: { group: 'atlas', tag: `atlas-${titel}` } }),
+    });
   }
 }

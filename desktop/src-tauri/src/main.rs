@@ -7,6 +7,8 @@ use tauri::{
     AppHandle, Manager, Url, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_notification::NotificationExt;
+use std::time::Duration;
 
 // Bij autostart opent Atlas stil in het systeemvak.
 const VERBORGEN: &str = "--verborgen";
@@ -24,9 +26,52 @@ fn toon(app: &AppHandle) {
     }
 }
 
+// Haalt elke vijf seconden nieuwe meldingen op bij de server waar het venster naartoe wijst, en laat ze als
+// Windows-melding zien. Zo komen ze ook binnen als Atlas in het systeemvak staat. Staat het venster open en
+// vooraan, dan toont de pagina ze zelf.
+fn meldingen(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut laatste: Option<u64> = None;
+        loop {
+            std::thread::sleep(Duration::from_secs(5));
+            let Some(venster) = app.get_webview_window("main") else { continue };
+            let Ok(url) = venster.url() else { continue };
+            let server = matches!(url.scheme(), "http" | "https") && url.host_str() != Some("tauri.localhost");
+            if !server {
+                continue;
+            }
+            let adres = match laatste {
+                Some(na) => format!("{}/api/meldingen?na={}", url.origin().ascii_serialization(), na),
+                None => format!("{}/api/meldingen", url.origin().ascii_serialization()),
+            };
+            let Ok(antwoord) = ureq::get(&adres).timeout(Duration::from_secs(5)).call() else { continue };
+            let Ok(data) = antwoord.into_json::<serde_json::Value>() else { continue };
+            let Some(nieuw) = data["laatste"].as_u64() else { continue };
+            let vooraan = venster.is_visible().unwrap_or(false) && venster.is_focused().unwrap_or(false);
+            // De eerste keer en na een herstart van de server alleen onthouden waar we zijn.
+            if laatste.is_some_and(|l| nieuw >= l) && !vooraan {
+                let lijst = data["meldingen"].as_array().cloned().unwrap_or_default();
+                for m in lijst.iter().rev().take(3).rev() {
+                    if m["pc"].as_bool() != Some(true) {
+                        continue;
+                    }
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title(m["titel"].as_str().unwrap_or("Atlas"))
+                        .body(m["tekst"].as_str().unwrap_or(""))
+                        .show();
+                }
+            }
+            laatste = Some(nieuw);
+        }
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| toon(app)))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![VERBORGEN]),
@@ -78,6 +123,7 @@ fn main() {
                 })
                 .build(app)?;
 
+            meldingen(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {

@@ -5,7 +5,8 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Google } from './google.js';
 import { HomeAssistant, haInstellingen } from './ha.js';
-import { instellingen, zetInstellingen } from './instellingen.js';
+import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
+import { Meldingen } from './meldingen.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,9 @@ app.log.info(ha ? `Home Assistant op ${ha.url}` : 'Geen HA_URL en HA_TOKEN inges
 
 // Alleen gewone entiteitnamen van het juiste soort komen door naar Home Assistant.
 const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-z0-9_]+$`).test(waarde) ? waarde : null);
+
+const meldingen = Meldingen.uitOmgeving(huis, app.log);
+app.log.info(meldingen.ingesteld ? 'Frigate ingesteld, meldingen staan aan.' : 'Geen FRIGATE_URL ingesteld, er komen geen meldingen.');
 
 const google = Google.uitOmgeving();
 app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');
@@ -90,6 +94,29 @@ app.post<{ Body: { id?: unknown; aan?: unknown } }>('/api/google/agenda', async 
   if (!(await google.agendas()).some((a) => a.id === id)) return reply.code(404).send({ fout: 'Onbekende agenda' });
   google.zetAgenda(id, aan);
   return { ok: true };
+});
+
+app.get<{ Querystring: { na?: string } }>('/api/meldingen', async (request) => {
+  const na = Number.parseInt(request.query.na ?? '', 10);
+  return meldingen.sinds(Number.isNaN(na) ? null : na);
+});
+
+app.get('/api/meldingen/opties', async () => {
+  const [cameras, toestellen] = await Promise.allSettled([meldingen.frigateCameras(), huis.toestellen()]);
+  return {
+    frigate: { ingesteld: meldingen.ingesteld, bereikbaar: cameras.status === 'fulfilled' && meldingen.ingesteld },
+    cameras: cameras.status === 'fulfilled' ? cameras.value : [],
+    toestellen: toestellen.status === 'fulfilled' ? toestellen.value : [],
+    soorten: SOORTEN,
+  };
+});
+
+app.post('/api/meldingen/test', async () => ({ telefoon: await meldingen.test() }));
+
+app.get<{ Params: { id: string } }>('/api/meldingen/:id/beeld', async (request, reply) => {
+  const beeld = await meldingen.beeld(request.params.id).catch(() => null);
+  if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
+  return reply.header('cache-control', 'max-age=3600').type(beeld.type).send(beeld.data);
 });
 
 app.get('/api/huis', async (_request, reply) => {

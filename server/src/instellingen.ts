@@ -5,23 +5,39 @@ export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'camer
 type Blok = (typeof BLOKKEN)[number];
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
+export const SOORTEN = ['person', 'car', 'bicycle', 'motorcycle', 'dog', 'cat', 'bird', 'package'] as const;
+export type Meldingen = {
+  pc: boolean;
+  telefoon: boolean;
+  /** notify-dienst van de Home Assistant-app, bijvoorbeeld mobile_app_iphone_vince. */
+  toestel: string | null;
+  /** Welke dingen die Frigate ziet een melding geven. */
+  soorten: string[];
+  /** Camera's die uit staan; een nieuwe camera doet dus vanzelf mee. */
+  camerasUit: string[];
+  /** Minuten stilte per camera na een melding. */
+  wachttijd: number;
+};
 export type Instellingen = {
   blokken: Record<Blok, boolean>;
   /** Startscherm voor een breed scherm (pc) en een smal scherm (telefoon). */
   start: { breed: Scherm; smal: Scherm };
   /** Belangrijke data: een deadline (alleen datum) of een periode (van t/m datum). */
   belangrijk: Datum[];
+  meldingen: Meldingen;
 };
 
 const standaard: Instellingen = {
   blokken: Object.fromEntries(BLOKKEN.map((b) => [b, true])) as Record<Blok, boolean>,
   start: { breed: 'thuis', smal: 'overzicht' },
   belangrijk: [],
+  meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2 },
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
 // Een blok dat later is toegevoegd, staat bij een oud bestand nog niet in de lijst.
 huidig.blokken = { ...standaard.blokken, ...huidig.blokken };
+huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
 
 export const instellingen = () => huidig;
 
@@ -58,6 +74,36 @@ export function zetInstellingen(nieuw: unknown): string | null {
       lijst.push({ id: typeof d.id === 'string' && d.id ? d.id.slice(0, 40) : crypto.randomUUID(), titel, datum: d.datum, van });
     }
     volgende.belangrijk = lijst.sort((a, b) => a.datum.localeCompare(b.datum));
+  }
+  if (n.meldingen !== undefined) {
+    const m = n.meldingen as Partial<Meldingen>;
+    if (!m || typeof m !== 'object') return 'Ongeldige meldingen';
+    const v = volgende.meldingen;
+    if (m.pc !== undefined) {
+      if (typeof m.pc !== 'boolean') return 'Ongeldige meldingen';
+      v.pc = m.pc;
+    }
+    if (m.telefoon !== undefined) {
+      if (typeof m.telefoon !== 'boolean') return 'Ongeldige meldingen';
+      v.telefoon = m.telefoon;
+    }
+    if (m.toestel !== undefined) {
+      if (m.toestel !== null && (typeof m.toestel !== 'string' || !/^mobile_app_[a-z0-9_]+$/.test(m.toestel))) return 'Onbekende telefoon';
+      v.toestel = m.toestel;
+    }
+    if (m.soorten !== undefined) {
+      if (!Array.isArray(m.soorten) || m.soorten.some((s) => !(SOORTEN as readonly string[]).includes(s))) return 'Onbekende soort';
+      v.soorten = [...new Set(m.soorten)];
+    }
+    if (m.camerasUit !== undefined) {
+      if (!Array.isArray(m.camerasUit) || m.camerasUit.length > 50 || m.camerasUit.some((c) => typeof c !== 'string' || !/^[\w-]{1,64}$/.test(c)))
+        return 'Ongeldige camera';
+      v.camerasUit = [...new Set(m.camerasUit)];
+    }
+    if (m.wachttijd !== undefined) {
+      if (typeof m.wachttijd !== 'number' || !Number.isInteger(m.wachttijd) || m.wachttijd < 0 || m.wachttijd > 60) return 'Ongeldige wachttijd';
+      v.wachttijd = m.wachttijd;
+    }
   }
 
   huidig = volgende;
