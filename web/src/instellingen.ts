@@ -122,7 +122,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     try {
       inst = await (await fetch('/api/instellingen')).json();
     } catch {
-      return [maak('p', 'muted', 'De server is niet bereikbaar.')];
+      return null;
     }
 
     const blokken = maak('section', 'inst-sectie');
@@ -130,8 +130,10 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       maak('h3', 'lbl', 'BLOKKEN'),
       maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren.'),
     );
+    const raster = maak('div', 'inst-raster');
     for (const [id, naam] of BLOKNAMEN)
-      blokken.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
+      raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
+    blokken.append(raster);
 
     const start = maak('section', 'inst-sectie');
     start.append(maak('h3', 'lbl', 'STARTSCHERM'));
@@ -207,7 +209,12 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     rij.append(toevoegen, opslaan);
     data.append(regels, rij, melding);
 
-    return [blokken, start, data, await tekenMeldingen(inst, (nieuw) => (inst = nieuw)), await tekenSnelkoppelingen(inst)];
+    return {
+      scherm: [blokken, start],
+      data: [data],
+      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw))],
+      knoppen: [await tekenSnelkoppelingen(inst)],
+    };
   }
 
   /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de pijl-knop bij Apparaten. */
@@ -423,10 +430,71 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     return sectie;
   }
 
+  // Tabbladen in plaats van één lange lijst. Het laatst gekozen tabblad blijft open bij de volgende keer.
+  const TABS = [
+    ['scherm', 'Scherm'],
+    ['data', 'Data'],
+    ['meldingen', 'Meldingen'],
+    ['knoppen', 'Knoppen'],
+    ['koppelingen', 'Koppelingen'],
+  ] as const;
+  type Tab = (typeof TABS)[number][0];
+  let tab: Tab = 'scherm';
+  try {
+    const bewaard = localStorage.getItem('atlas-inst-tab');
+    if (TABS.some(([id]) => id === bewaard)) tab = bewaard as Tab;
+  } catch {
+    // Geen opslag in de browser, dan begint het bij Scherm.
+  }
+
   async function teken() {
     const google = maak('div');
-    const [algemeen, versie] = await Promise.all([tekenAlgemeen(), tekenVersie()]);
-    inhoud.replaceChildren(...(versie.childElementCount > 2 ? [versie] : []), ...algemeen, google, ...(versie.childElementCount > 2 ? [] : [versie]));
+    const [delen, versie] = await Promise.all([tekenAlgemeen(), tekenVersie()]);
+    if (!delen) {
+      inhoud.replaceChildren(maak('p', 'muted', 'De server is niet bereikbaar.'));
+      return;
+    }
+    const nieuw = versie.childElementCount > 2;
+    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [google, ...(nieuw ? [] : [versie])] };
+    const balk = maak('div', 'inst-tabs');
+    balk.setAttribute('role', 'tablist');
+    balk.setAttribute('aria-label', 'Onderdelen van de instellingen');
+    const vak = maak('div', 'inst-paneel');
+    vak.setAttribute('role', 'tabpanel');
+    const knoppen = TABS.map(([id, naam]) => {
+      const k = knop(naam, 'inst-tab');
+      k.setAttribute('role', 'tab');
+      k.id = `inst-tab-${id}`;
+      k.addEventListener('click', () => kies(id));
+      k.addEventListener('keydown', (e) => {
+        const stap = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!stap) return;
+        const volgende = TABS[(TABS.findIndex(([t]) => t === id) + stap + TABS.length) % TABS.length][0];
+        kies(volgende);
+        document.getElementById(`inst-tab-${volgende}`)?.focus();
+      });
+      return k;
+    });
+    function kies(id: Tab) {
+      tab = id;
+      try {
+        localStorage.setItem('atlas-inst-tab', id);
+      } catch {
+        // Niet erg.
+      }
+      knoppen.forEach((k, i) => {
+        const gekozen = TABS[i][0] === id;
+        k.setAttribute('aria-selected', String(gekozen));
+        k.tabIndex = gekozen ? 0 : -1;
+      });
+      vak.setAttribute('aria-labelledby', `inst-tab-${id}`);
+      vak.replaceChildren(...panelen[id]);
+      vak.scrollTop = 0;
+    }
+    balk.append(...knoppen);
+    // Staat er een nieuwe versie klaar, dan staat die bovenaan, los van de tabbladen.
+    inhoud.replaceChildren(...(nieuw ? [versie] : []), balk, vak);
+    kies(tab);
     await tekenGoogle(google);
   }
 

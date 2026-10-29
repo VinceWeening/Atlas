@@ -185,11 +185,48 @@ app.get('/api/huis', async (_request, reply) => {
   }
 });
 
-app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/lamp/:id', async (request, reply) => {
+// Lamp aan of uit ({aan}), dimmen ({helderheid: 1-100}) of warmer/koeler wit ({kelvin}).
+app.post<{ Params: { id: string }; Body: { aan?: unknown; helderheid?: unknown; kelvin?: unknown } }>('/api/lamp/:id', async (request, reply) => {
   const id = entiteit('light', request.params.id);
-  if (!id || typeof request.body?.aan !== 'boolean') return reply.code(400).send({ fout: 'Onbekende lamp of opdracht' });
+  const { aan, helderheid, kelvin } = request.body ?? {};
+  const geldig =
+    (aan === undefined || typeof aan === 'boolean') &&
+    (helderheid === undefined || (Number.isInteger(helderheid) && (helderheid as number) >= 1 && (helderheid as number) <= 100)) &&
+    (kelvin === undefined || (Number.isInteger(kelvin) && (kelvin as number) >= 1000 && (kelvin as number) <= 10000)) &&
+    (aan !== undefined || helderheid !== undefined || kelvin !== undefined);
+  if (!id || !geldig) return reply.code(400).send({ fout: 'Onbekende lamp of opdracht' });
   if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Lamp niet gevonden' });
-  await huis.lamp(id, request.body.aan);
+  await huis.lamp(id, { aan: aan as boolean | undefined, helderheid: helderheid as number | undefined, kelvin: kelvin as number | undefined });
+  return { ok: true };
+});
+
+app.get<{ Params: { id: string } }>('/api/camera/:id/opties', async (request, reply) => {
+  const id = entiteit('camera', request.params.id);
+  if (!id) return reply.code(404).send({ fout: 'Camera niet gevonden' });
+  try {
+    return { opties: await huis.cameraOpties(id) };
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+// Eén instelling van een camera zetten. Alleen wat bij die camera hoort, en alleen geldige waarden.
+app.post<{ Params: { id: string; optie: string }; Body: { waarde?: unknown } }>('/api/camera/:id/opties/:optie', async (request, reply) => {
+  const id = entiteit('camera', request.params.id);
+  const optie = id ? (await huis.cameraOpties(id)).find((o) => o.id === request.params.optie) : undefined;
+  if (!optie) return reply.code(404).send({ fout: 'Deze instelling hoort niet bij de camera' });
+  const w = request.body?.waarde;
+  const geldig =
+    optie.soort === 'button'
+      ? true
+      : optie.soort === 'select'
+        ? typeof w === 'string' && !!optie.keuzes?.includes(w)
+        : optie.soort === 'number'
+          ? typeof w === 'number' && Number.isFinite(w) && w >= optie.min! && w <= optie.max!
+          : typeof w === 'boolean';
+  if (!geldig) return reply.code(400).send({ fout: 'Ongeldige waarde' });
+  await huis.cameraOptie(optie, (w ?? null) as boolean | string | number | null);
   return { ok: true };
 });
 

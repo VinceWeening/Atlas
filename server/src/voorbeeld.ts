@@ -1,4 +1,4 @@
-import type { Apparaat, Apparaten, Huis } from './ha.js';
+import type { Apparaat, Apparaten, CameraOptie, Huis, Lamp } from './ha.js';
 
 // Voorbeeldgegevens. Agenda en mail blijven voorbeeld tot de Google-koppeling er is;
 // het huis gebruikt dit alleen als er geen Home Assistant is ingesteld.
@@ -16,7 +16,15 @@ export const voorbeeld = {
   ],
 };
 
-const lamp = (id: string, naam: string, aan: boolean) => ({ id, naam, aan, helderheid: aan ? 80 : null, bereikbaar: true });
+const lamp = (id: string, naam: string, aan: boolean): Lamp => ({
+  id,
+  naam,
+  aan,
+  helderheid: aan ? 80 : null,
+  dimbaar: true,
+  kleurtemp: { min: 2200, max: 6500, nu: 2700 },
+  bereikbaar: true,
+});
 
 export class VoorbeeldHuis {
   private staat: Huis = {
@@ -52,15 +60,24 @@ export class VoorbeeldHuis {
     return this.alleLampen().some((l) => l.id === entiteit) || this.staat.scenes.some((s) => s.id === entiteit);
   }
 
-  async lamp(entiteit: string, aan: boolean) {
+  async lamp(entiteit: string, opdracht: { aan?: boolean; helderheid?: number; kelvin?: number }) {
     const gevonden = this.alleLampen().find((l) => l.id === entiteit);
-    if (gevonden) gevonden.aan = aan;
+    if (!gevonden) return;
+    gevonden.aan = opdracht.aan ?? true;
+    if (opdracht.helderheid != null) gevonden.helderheid = opdracht.helderheid;
+    if (opdracht.kelvin != null && gevonden.kleurtemp) gevonden.kleurtemp.nu = opdracht.kelvin;
   }
+
+  async cameraOpties(_camera: string): Promise<CameraOptie[]> {
+    return [];
+  }
+
+  async cameraOptie(_optie: CameraOptie, _waarde: unknown) {}
 
   async scene(_entiteit: string) {}
 
   async apparaten(): Promise<Apparaten> {
-    const alsApparaat = (l: { id: string; naam: string; aan: boolean; helderheid: number | null }): Apparaat => ({
+    const alsApparaat = (l: Lamp): Apparaat => ({
       id: l.id,
       naam: l.naam,
       soort: 'light',
@@ -68,6 +85,7 @@ export class VoorbeeldHuis {
       aan: l.aan,
       bediening: 'schakel',
       bereikbaar: true,
+      lamp: { helderheid: l.helderheid, dimbaar: l.dimbaar, kleurtemp: l.kleurtemp },
     });
     const sensor = (id: string, naam: string, tekst: string): Apparaat => ({ id, naam, soort: 'sensor', tekst, aan: null, bediening: null, bereikbaar: true });
     return {
@@ -85,7 +103,7 @@ export class VoorbeeldHuis {
   }
 
   async bedien(entiteit: string, aan: boolean) {
-    await this.lamp(entiteit, aan);
+    await this.lamp(entiteit, { aan });
   }
 
   async cameraBeeld(_entiteit: string): Promise<{ type: string; data: Buffer } | null> {

@@ -1,7 +1,31 @@
 // Koppeling met Home Assistant via de REST-API. Atlas vraagt zelf op welke ruimtes, lampen, camera's en scènes er zijn,
 // dus er hoeft niets per lamp ingesteld te worden.
 
-export type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
+export type Lamp = {
+  id: string;
+  naam: string;
+  aan: boolean;
+  helderheid: number | null;
+  /** Of de lamp te dimmen is; dan toont Atlas een schuifje. */
+  dimbaar: boolean;
+  /** Kleurtemperatuur in kelvin, als de lamp warm en koel wit kan. */
+  kleurtemp: { min: number; max: number; nu: number | null } | null;
+  bereikbaar: boolean;
+};
+/** Een instelling van een camera zelf, zoals het IR-licht, de nachtzichtstand of de sirene. */
+export type CameraOptie = {
+  id: string;
+  naam: string;
+  soort: 'switch' | 'light' | 'siren' | 'select' | 'number' | 'button';
+  aan: boolean | null;
+  waarde: string | number | null;
+  keuzes?: string[];
+  min?: number;
+  max?: number;
+  stap?: number;
+  eenheid?: string;
+  bereikbaar: boolean;
+};
 export type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 export type Camera = { id: string; naam: string; kamer: string | null; beweging: string | null };
 export type Scene = { id: string; naam: string };
@@ -17,11 +41,26 @@ export type Apparaat = {
   /** Wat de knop doet: schakelen (aan/uit), starten (scène of script) of niets. */
   bediening: 'schakel' | 'start' | null;
   bereikbaar: boolean;
+  /** Bij lampen: helderheid en kleurtemperatuur. */
+  lamp?: Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtemp'>;
 };
 export type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
 
 /** Soorten die op het scherm Apparaten komen, in deze volgorde. Camera's hebben een eigen scherm. */
 const SOORTEN = ['light', 'switch', 'fan', 'cover', 'climate', 'media_player', 'vacuum', 'lock', 'input_boolean', 'scene', 'script', 'sensor', 'binary_sensor', 'person', 'weather'];
+/** De schakelaars die Frigate bij elke camera maakt, in het Nederlands. */
+const FRIGATE_NAMEN: Record<string, string> = {
+  detect: 'Detectie',
+  recordings: 'Opnemen',
+  snapshots: 'Snapshots',
+  motion: 'Bewegingsdetectie',
+  'improve contrast': 'Contrast verbeteren',
+  'review alerts': 'Meldingen in Frigate',
+  'review detections': 'Detecties in Frigate',
+  'ptz autotracker': 'Automatisch volgen',
+};
+/** Soorten instellingen die bij een camera getoond worden, in deze volgorde. */
+const CAMERA_SOORTEN: CameraOptie['soort'][] = ['light', 'switch', 'select', 'number', 'siren', 'button'];
 /** Wat Atlas mag bedienen. Sloten bewust niet: die alleen bekijken. */
 export const BEDIENBAAR = ['light', 'switch', 'fan', 'input_boolean', 'media_player', 'cover', 'scene', 'script'];
 export type Huis = {
@@ -103,6 +142,21 @@ const staatNamen: Record<string, string> = {
   unavailable: 'Niet bereikbaar',
 };
 
+/** Helderheid en kleurtemperatuur van een lamp, voor zover de lamp dat kan. */
+function lampDelen(t: Toestand): Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtemp'> {
+  const a = t.attributes;
+  const standen = Array.isArray(a.supported_color_modes) ? (a.supported_color_modes as string[]) : [];
+  const dimbaar = standen.some((s) => s !== 'onoff') || typeof a.brightness === 'number';
+  const min = Number(a.min_color_temp_kelvin);
+  const max = Number(a.max_color_temp_kelvin);
+  const warmKoel = (standen.includes('color_temp') || standen.some((s) => ['hs', 'rgb', 'rgbw', 'rgbww', 'xy'].includes(s))) && min > 0 && max > min;
+  return {
+    helderheid: typeof a.brightness === 'number' ? Math.round((a.brightness / 255) * 100) : null,
+    dimbaar,
+    kleurtemp: warmKoel ? { min, max, nu: typeof a.color_temp_kelvin === 'number' ? a.color_temp_kelvin : null } : null,
+  };
+}
+
 function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
   const soort = t.entity_id.split('.')[0];
   const a = t.attributes;
@@ -136,6 +190,7 @@ function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
     aan: schakelbaar ? !['off', 'closed', 'unavailable', 'unknown', 'standby'].includes(t.state) : null,
     bediening: schakelbaar ? 'schakel' : soort === 'scene' || soort === 'script' ? 'start' : null,
     bereikbaar,
+    ...(soort === 'light' ? { lamp: lampDelen(t) } : {}),
   };
 }
 
@@ -199,7 +254,7 @@ export class HomeAssistant {
       id: t.entity_id,
       naam: naam(t),
       aan: t.state === 'on',
-      helderheid: typeof t.attributes.brightness === 'number' ? Math.round((t.attributes.brightness / 255) * 100) : null,
+      ...lampDelen(t),
       bereikbaar: t.state !== 'unavailable',
     });
     const isTemperatuur = (t: Toestand) =>
@@ -297,11 +352,74 @@ export class HomeAssistant {
     return antwoord.ok;
   }
 
-  async lamp(entiteit: string, aan: boolean) {
-    await this.vraag(`/api/services/light/${aan ? 'turn_on' : 'turn_off'}`, {
-      method: 'POST',
-      body: JSON.stringify({ entity_id: entiteit }),
-    });
+  /** Lamp aan of uit, of dimmen (helderheid 1 tot 100) en warmer of koeler zetten (kelvin). */
+  async lamp(entiteit: string, opdracht: { aan?: boolean; helderheid?: number; kelvin?: number }) {
+    if (opdracht.aan === false) {
+      await this.vraag('/api/services/light/turn_off', { method: 'POST', body: JSON.stringify({ entity_id: entiteit }) });
+      return;
+    }
+    const extra: Record<string, number> = {};
+    if (opdracht.helderheid != null) extra.brightness_pct = opdracht.helderheid;
+    if (opdracht.kelvin != null) extra.color_temp_kelvin = opdracht.kelvin;
+    await this.vraag('/api/services/light/turn_on', { method: 'POST', body: JSON.stringify({ entity_id: entiteit, ...extra }) });
+  }
+
+  /**
+   * De instellingen van een camera zelf: alles op het apparaat van de camera in Home Assistant, plus wat er qua naam bij
+   * hoort (de camera-integratie en Frigate maken vaak elk een eigen apparaat, bijvoorbeeld "Voordeur IR-licht").
+   * Knoppen die de camera herstarten, resetten of bijwerken laat Atlas bewust weg.
+   */
+  async cameraOpties(camera: string): Promise<CameraOptie[]> {
+    const sjabloon = `{% set d = device_id('${camera}') %}{{ (device_entities(d) if d else []) | tojson }}`;
+    const [toestanden, eigen] = await Promise.all([
+      this.vraag('/api/states').then((a) => a.json() as Promise<Toestand[]>),
+      this.vraag('/api/template', { method: 'POST', body: JSON.stringify({ template: sjabloon }) })
+        .then(async (a) => JSON.parse(await a.text()) as string[])
+        .catch(() => [] as string[]),
+    ]);
+    const cam = toestanden.find((t) => t.entity_id === camera);
+    if (!cam) return [];
+    const camNaam = (cam.attributes.friendly_name ?? '').toLowerCase();
+    const slug = camera.split('.')[1];
+    const hoortErbij = (t: Toestand) => {
+      const [, object] = t.entity_id.split('.');
+      const naam = (t.attributes.friendly_name ?? '').toLowerCase();
+      return eigen.includes(t.entity_id) || object.startsWith(`${slug}_`) || (camNaam.length > 2 && naam.startsWith(`${camNaam} `));
+    };
+    const verboden = /reboot|restart|herstart|reset|update|firmware|format|factory|fabriek|wis|delete|identify/i;
+    const opties: CameraOptie[] = [];
+    for (const t of toestanden) {
+      const soort = t.entity_id.split('.')[0] as CameraOptie['soort'];
+      if (!CAMERA_SOORTEN.includes(soort) || !hoortErbij(t)) continue;
+      if (verboden.test(t.entity_id) || verboden.test(t.attributes.friendly_name ?? '')) continue;
+      if (t.attributes.entity_category === 'diagnostic') continue;
+      let naam = t.attributes.friendly_name ?? t.entity_id;
+      if (camNaam && naam.toLowerCase().startsWith(`${camNaam} `)) naam = naam.slice(camNaam.length + 1).replace(/^\w/, (l) => l.toUpperCase());
+      naam = FRIGATE_NAMEN[naam.toLowerCase()] ?? naam;
+      const a = t.attributes;
+      opties.push({
+        id: t.entity_id,
+        naam,
+        soort,
+        aan: ['switch', 'light', 'siren'].includes(soort) ? t.state === 'on' : null,
+        waarde: soort === 'number' ? Number(t.state) : soort === 'select' ? t.state : null,
+        ...(soort === 'select' && Array.isArray(a.options) ? { keuzes: a.options as string[] } : {}),
+        ...(soort === 'number'
+          ? { min: Number(a.min ?? 0), max: Number(a.max ?? 100), stap: Number(a.step ?? 1), eenheid: typeof a.unit_of_measurement === 'string' ? a.unit_of_measurement : undefined }
+          : {}),
+        bereikbaar: t.state !== 'unavailable',
+      });
+    }
+    return opties.sort((x, y) => CAMERA_SOORTEN.indexOf(x.soort) - CAMERA_SOORTEN.indexOf(y.soort) || x.naam.localeCompare(y.naam, 'nl'));
+  }
+
+  /** Zet één camera-instelling; de waarde is al gecontroleerd tegen wat cameraOpties gaf. */
+  async cameraOptie(optie: CameraOptie, waarde: boolean | string | number | null) {
+    const [soort] = optie.id.split('.');
+    const dienst =
+      soort === 'select' ? 'select_option' : soort === 'number' ? 'set_value' : soort === 'button' ? 'press' : waarde ? 'turn_on' : 'turn_off';
+    const extra = soort === 'select' ? { option: waarde } : soort === 'number' ? { value: waarde } : {};
+    await this.vraag(`/api/services/${soort}/${dienst}`, { method: 'POST', body: JSON.stringify({ entity_id: optie.id, ...extra }) });
   }
 
   async scene(entiteit: string) {

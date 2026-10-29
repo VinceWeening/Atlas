@@ -1,4 +1,6 @@
 // De schermen Apparaten (alles uit Home Assistant per ruimte) en Camera's (alle camera's tegelijk).
+import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
+
 type Apparaat = {
   id: string;
   naam: string;
@@ -7,9 +9,23 @@ type Apparaat = {
   aan: boolean | null;
   bediening: 'schakel' | 'start' | null;
   bereikbaar: boolean;
+  lamp?: LampDelen;
 };
 type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
 type Camera = { id: string; naam: string };
+type CameraOptie = {
+  id: string;
+  naam: string;
+  soort: 'switch' | 'light' | 'siren' | 'select' | 'number' | 'button';
+  aan: boolean | null;
+  waarde: string | number | null;
+  keuzes?: string[];
+  min?: number;
+  max?: number;
+  stap?: number;
+  eenheid?: string;
+  bereikbaar: boolean;
+};
 
 function maak<K extends keyof HTMLElementTagNameMap>(tag: K, klasse?: string, inhoud?: string) {
   const el = document.createElement(tag);
@@ -122,6 +138,8 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
       k.addEventListener('click', () => bedien(a, true));
       r.append(k);
     }
+    const schuiven = lampSchuiven(a, () => setTimeout(laad, 400));
+    if (schuiven) r.append(schuiven);
     return r;
   }
 
@@ -163,7 +181,7 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
       staat.fout = true;
     }
     // Niet opnieuw tekenen terwijl iemand een schakelaar indrukt.
-    if (!staat.bezig.size) teken();
+    if (!staat.bezig.size && !schuiftNu()) teken();
   }
 
   teken();
@@ -211,7 +229,9 @@ export function maakCameras() {
               grootNaam.textContent = c.naam;
               grootBeeld.src = adres(c);
               grootBeeld.alt = `Camerabeeld ${c.naam}`;
+              optiesVak.replaceChildren(maak('p', 'muted klein', 'Instellingen laden…'));
               groot.showModal();
+              laadOpties(c);
             });
             return tegel;
           })
@@ -231,6 +251,115 @@ export function maakCameras() {
   setInterval(() => {
     if (open && groot.open) grootBeeld.src = adres(open);
   }, 2000);
+
+  // Instellingen van de camera zelf naast het grote beeld: IR-licht, nachtzicht, sirene, Frigate-detectie en zo.
+  const optiesVak = document.getElementById('camera-groot-opties')!;
+  let optiesBezig = false;
+  let optieVast = false;
+  optiesVak.addEventListener('pointerdown', () => (optieVast = true));
+  window.addEventListener('pointerup', () => (optieVast = false));
+
+  async function laadOpties(c: Camera) {
+    try {
+      const antwoord = await fetch(`/api/camera/${encodeURIComponent(c.id)}/opties`);
+      if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+      const { opties } = (await antwoord.json()) as { opties: CameraOptie[] };
+      if (open?.id === c.id && !optiesBezig && !optieVast && optiesVak.querySelector('select:focus') == null) tekenOpties(c, opties);
+    } catch {
+      if (open?.id === c.id) optiesVak.replaceChildren(maak('p', 'muted klein', 'Instellingen van de camera niet bereikbaar.'));
+    }
+  }
+
+  async function zetOptie(c: Camera, o: CameraOptie, waarde: boolean | string | number | null) {
+    optiesBezig = true;
+    try {
+      const antwoord = await fetch(`/api/camera/${encodeURIComponent(c.id)}/opties/${encodeURIComponent(o.id)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ waarde }),
+      });
+      if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    } catch (fout) {
+      console.error('Camera-instelling mislukt', fout);
+    }
+    optiesBezig = false;
+    setTimeout(() => open?.id === c.id && laadOpties(c), 700);
+  }
+
+  function tekenOpties(c: Camera, opties: CameraOptie[]) {
+    if (!opties.length) {
+      optiesVak.replaceChildren(
+        maak('h3', 'lbl', 'INSTELLINGEN'),
+        maak('p', 'muted klein', 'Home Assistant heeft geen schakelaars of standen bij deze camera. Zit de camera-integratie (bijvoorbeeld Reolink, Tapo of ONVIF) er wel in, dan verschijnen IR-licht en nachtzicht hier vanzelf.'),
+      );
+      return;
+    }
+    const rijen = opties.map((o) => {
+      const r = maak('div', 'lamp apparaat' + (o.bereikbaar ? '' : ' weg'));
+      const info = maak('div', 'lamp-info');
+      const namen = maak('span');
+      namen.append(o.naam);
+      info.append(namen);
+      r.append(info);
+      if (o.soort === 'select' && o.keuzes) {
+        const keuze = maak('select', 'kamer-keuze keuze');
+        keuze.setAttribute('aria-label', o.naam);
+        keuze.disabled = !o.bereikbaar;
+        keuze.append(...o.keuzes.map((k) => Object.assign(maak('option', undefined, k), { value: k })));
+        keuze.value = String(o.waarde ?? '');
+        keuze.addEventListener('change', () => zetOptie(c, o, keuze.value));
+        r.append(keuze);
+      } else if (o.soort === 'number') {
+        const vak = maak('label', 'schuif');
+        const invoer = maak('input');
+        invoer.type = 'range';
+        invoer.min = String(o.min ?? 0);
+        invoer.max = String(o.max ?? 100);
+        invoer.step = String(o.stap ?? 1);
+        invoer.value = String(o.waarde ?? o.min ?? 0);
+        invoer.disabled = !o.bereikbaar;
+        invoer.setAttribute('aria-label', o.naam);
+        const tekst = (w: string) => `${Number(w).toLocaleString('nl-NL')}${o.eenheid ? ` ${o.eenheid}` : ''}`;
+        const waarde = maak('span', 'schuif-waarde', tekst(invoer.value));
+        const vul = () => invoer.style.setProperty('--vul', `${((Number(invoer.value) - Number(invoer.min)) / (Number(invoer.max) - Number(invoer.min) || 1)) * 100}%`);
+        vul();
+        invoer.addEventListener('input', () => {
+          waarde.textContent = tekst(invoer.value);
+          vul();
+        });
+        invoer.addEventListener('change', () => zetOptie(c, o, Number(invoer.value)));
+        vak.append(invoer, waarde);
+        r.append(vak);
+      } else if (o.soort === 'button') {
+        const k = maak('button', 'knop zacht', 'Uitvoeren');
+        k.type = 'button';
+        k.disabled = !o.bereikbaar;
+        k.setAttribute('aria-label', `${o.naam} uitvoeren`);
+        k.addEventListener('click', () => zetOptie(c, o, null));
+        r.append(k);
+      } else {
+        const s = maak('button', 'schakelaar');
+        s.type = 'button';
+        s.setAttribute('role', 'switch');
+        s.setAttribute('aria-checked', String(!!o.aan));
+        s.setAttribute('aria-label', `${o.naam} ${o.aan ? 'uitzetten' : 'aanzetten'}`);
+        s.disabled = !o.bereikbaar;
+        s.addEventListener('click', () => {
+          // Een sirene gaat niet per ongeluk af.
+          if (o.soort === 'siren' && !o.aan && !confirm(`${o.naam} aanzetten? Dat maakt veel lawaai.`)) return;
+          s.setAttribute('aria-checked', String(!o.aan));
+          zetOptie(c, o, !o.aan);
+        });
+        r.append(s);
+      }
+      return r;
+    });
+    optiesVak.replaceChildren(maak('h3', 'lbl', 'INSTELLINGEN'), ...rijen);
+  }
+
+  setInterval(() => {
+    if (open && groot.open) laadOpties(open);
+  }, 10_000);
 
   // Terugkijken: de laatste opnames van Frigate, met een eigen videovenster.
   const opnamesLijst = document.getElementById('opnames-lijst')!;

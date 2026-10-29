@@ -47,6 +47,8 @@ Atlas vraagt zelf aan Home Assistant welke ruimtes, lampen, temperatuursensoren,
 
 Lampen verschijnen in de kamer waaraan ze in Home Assistant zijn toegewezen. De plattegrond koppelt een kamer op naam (bijvoorbeeld "Woonkamer" of "Keuken"); kamers die niet op de plattegrond staan kies je in de keuzelijst van het kamerpaneel. Lampen zonder ruimte staan onder "Overige lampen".
 
+Dimbare lampen krijgen een schuifje voor de helderheid, en lampen die warm en koel wit kunnen een tweede schuifje daarvoor. Bij het grote camerabeeld (scherm Camera's) staan de instellingen van de camera zelf: alles wat Home Assistant bij die camera heeft, zoals IR-licht, dag/nacht-stand, spotlight, sirene en de schakelaars van Frigate (detectie, opnemen). Knoppen die een camera herstarten, resetten of bijwerken laat Atlas bewust weg.
+
 ## Meldingen van Frigate
 
 Atlas kijkt elke vijf seconden of Frigate iets nieuws heeft gezien en stuurt een melding naar je pc, je telefoon of allebei.
@@ -92,6 +94,8 @@ Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor
 Daarna kies je in het tandwiel welke agenda's Atlas laat zien. De koppeling staat in het volume `atlas-data`, dus een update van Atlas laat hem staan.
 
 ## Het tandwiel
+
+Het tandwiel heeft tabbladen: Scherm, Data, Meldingen, Knoppen en Koppelingen.
 
 - **Blokken**: zet elk blok aan of uit, ook het huis. Staat het huis uit, dan gaat het naar de achtergrond; met de knop "Huis" bovenin haal je het weer naar voren.
 - **Startscherm**: kies per apparaat tussen Thuis (huis met blokken eromheen) en Overzicht (alleen blokken in een raster). Standaard is dat Thuis op de pc en Overzicht op de telefoon.

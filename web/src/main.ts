@@ -1,6 +1,7 @@
 import './styles.css';
 import { lagen, type Ruimte } from './huis';
 import { instellingen, type Instellingen } from './instellingen';
+import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { maakApparaten, maakCameras } from './paginas';
 
 type Overzicht = {
@@ -15,8 +16,17 @@ type Overzicht = {
   google?: { ingesteld: boolean; gekoppeld: boolean };
 };
 type Scherm = Instellingen['start']['breed'] | 'apparaten' | 'cameras';
-type Apparaat = { id: string; naam: string; soort: string; tekst: string; aan: boolean | null; bediening: 'schakel' | 'start' | null; bereikbaar: boolean };
-type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
+type Apparaat = {
+  id: string;
+  naam: string;
+  soort: string;
+  tekst: string;
+  aan: boolean | null;
+  bediening: 'schakel' | 'start' | null;
+  bereikbaar: boolean;
+  lamp?: LampDelen;
+};
+type Lamp = { id: string; naam: string; aan: boolean; bereikbaar: boolean } & LampDelen;
 type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 type Huis = {
   bron: 'home-assistant' | 'voorbeeld';
@@ -88,24 +98,32 @@ const lichtAan = (r: Ruimte) => !!kamerBij(r)?.lampen.some((l) => l.aan);
 function tekenHuis() {
   const huis = $('huis');
   const driedee = staat.modus === '3d';
+  // In 3D blijft het hele huis staan; een gekozen verdieping komt in focus en de rest blijft vaag zichtbaar. In 2D zie je
+  // alleen de gekozen verdieping (of de begane grond bij Alles).
   const getoond = !driedee && staat.verdieping === 'alle' ? 'bg' : staat.verdieping;
-  const gestapeld = getoond === 'alle';
+  const gestapeld = driedee;
+  const focus = driedee && staat.verdieping !== 'alle' ? lagen.findIndex((l) => l.id === staat.verdieping) : -1;
 
-  const gebouw = maak('div', 'gebouw' + (driedee ? '' : ' plat'));
+  const gebouw = maak('div', 'gebouw' + (driedee ? '' : ' plat') + (focus >= 0 ? ' met-focus' : ''));
   gebouw.style.transform = !driedee
     ? 'scale(0.92)'
-    : gestapeld
-      ? 'translateY(110px) rotateX(60deg) rotateZ(-38deg) scale(0.78)'
-      : 'translateY(40px) rotateX(55deg) rotateZ(-38deg) scale(0.95)';
+    : focus >= 0
+      ? // Het huis schuift zo dat de gekozen verdieping ongeveer in het midden staat.
+        `translateY(${Math.round(70 + (lagen[focus].z - 160) * 0.7)}px) rotateX(58deg) rotateZ(-38deg) scale(0.84)`
+      : 'translateY(110px) rotateX(60deg) rotateZ(-38deg) scale(0.78)';
 
-  for (const laag of lagen) {
+  for (const [i, laag] of lagen.entries()) {
     if (!gestapeld && getoond !== laag.id) continue;
-    const vlak = maak('div', 'laag');
+    const vlak = maak('div', 'laag' + (focus < 0 ? '' : i === focus ? ' focus' : ' vervaagd'));
     vlak.style.height = `${laag.hoogte}%`;
-    vlak.style.transform = `translateZ(${gestapeld ? laag.z : 0}px)`;
-    vlak.style.boxShadow = gestapeld
-      ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
-      : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
+    // Verdiepingen boven de gekozen schuiven wat omhoog, zodat je van bovenaf goed in de gekozen verdieping kijkt.
+    const z = gestapeld ? laag.z + (focus >= 0 && i > focus ? 90 : 0) : 0;
+    vlak.style.transform = `translateZ(${z}px)`;
+    vlak.style.boxShadow = i === focus
+      ? '0 0 0 2px #D6EDFF, 0 0 40px rgba(111,168,255,0.35), 0 50px 80px -20px rgba(0,0,0,0.7)'
+      : gestapeld
+        ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
+        : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
     // Op de naam van een verdieping klikken gaat naar die verdieping, en nog een keer klikken terug naar alles.
     const naam = maak('button', 'lbl laag-naam', laag.label);
     naam.type = 'button';
@@ -210,6 +228,8 @@ function lampRij(lamp: Lamp) {
   schakelaar.disabled = !lamp.bereikbaar;
   schakelaar.addEventListener('click', () => zetLamp(lamp, !lamp.aan));
   rij.append(info, schakelaar);
+  const schuiven = lampSchuiven(lamp, () => setTimeout(laadHuis, 400));
+  if (schuiven) rij.append(schuiven);
   return rij;
 }
 
@@ -250,7 +270,9 @@ function tekenKamer() {
     lijst.replaceChildren(maak('p', 'muted', 'Deze ruimte is nog niet gekoppeld aan een ruimte in Home Assistant.'));
   } else if (lampen.length === 0) {
     lijst.replaceChildren(maak('p', 'muted', 'Hier zijn geen lampen.'));
-  } else {
+  } else if (!(schuiftNu() && lijst.dataset.kamer === staat.kamer)) {
+    // Niet opnieuw opbouwen terwijl er aan een schuifje getrokken wordt.
+    lijst.dataset.kamer = staat.kamer ?? '';
     lijst.replaceChildren(...lampen.map(lampRij));
   }
 }
@@ -333,6 +355,7 @@ function tekenScenes() {
 
 function tekenFavorieten() {
   const ids = staat.inst?.favorieten ?? [];
+  if (schuiftNu() && $('favorieten').querySelector('input[type=range]')) return;
   if (!ids.length) {
     $('favorieten').replaceChildren(maak('p', 'muted klein', 'Geef lampen een ster bij Apparaten, dan staan ze hier.'));
     return;
@@ -346,13 +369,18 @@ function tekenFavorieten() {
       .map((id) => staat.apparaten!.find((a) => a.id === id))
       .filter((a): a is Apparaat => !!a)
       .map((a) => {
+        const vak = maak('div', 'favoriet-vak' + (a.aan ? ' aan' : ''));
         const tegel = maak('button', 'favoriet' + (a.aan ? ' aan' : ''));
         tegel.type = 'button';
         tegel.disabled = !a.bereikbaar;
         if (a.bediening === 'schakel') tegel.setAttribute('aria-pressed', String(!!a.aan));
         tegel.append(maak('span', 'favoriet-lamp'), maak('strong', undefined, a.naam), maak('span', 'muted klein', a.bereikbaar ? a.tekst || 'Starten' : 'Niet bereikbaar'));
         tegel.addEventListener('click', () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan));
-        return tegel;
+        vak.append(tegel);
+        // Bij een brandende dimbare lamp meteen een schuifje voor de helderheid.
+        const schuiven = a.aan ? lampSchuiven({ ...a, lamp: a.lamp && { ...a.lamp, kleurtemp: null } }, () => setTimeout(laadApparaten, 400)) : null;
+        if (schuiven) vak.append(schuiven);
+        return vak;
       }),
   );
 }
