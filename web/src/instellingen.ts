@@ -1,4 +1,7 @@
-// Het tandwiel: voorlopig alleen de Google-koppeling en welke agenda's meedoen. Blokken aan/uit volgen in stap 2.
+// Het tandwiel: blokken aan/uit, startscherm, belangrijke data en de Google-koppeling.
+type Scherm = 'thuis' | 'overzicht';
+export type Datum = { id: string; titel: string; datum: string; van: string | null };
+export type Instellingen = { blokken: Record<string, boolean>; start: { breed: Scherm; smal: Scherm }; belangrijk: Datum[] };
 type Agenda = { id: string; naam: string; kleur: string | null; aan: boolean };
 type GoogleStatus = { ingesteld: boolean; gekoppeld: boolean; agendas: Agenda[] };
 
@@ -26,14 +29,152 @@ async function stuur(adres: string, methode: string, body?: unknown) {
   return data;
 }
 
-export function instellingen(naVerandering: () => void) {
+const BLOKNAMEN: [string, string][] = [
+  ['huis', 'Huis (plattegrond)'],
+  ['vandaag', 'Vandaag'],
+  ['belangrijk', 'Belangrijk'],
+  ['mail', 'Mail'],
+  ['kamer', 'Kamer en lampen'],
+  ['camera', 'Camera'],
+  ['scenes', 'Scènes'],
+  ['hud', 'Statusregel boven'],
+];
+
+function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>) {
+  const rij = maak('div', 'lamp');
+  rij.append(maak('div', 'lamp-info', naam));
+  const schakelaar = knop('', 'schakelaar');
+  schakelaar.setAttribute('role', 'switch');
+  schakelaar.setAttribute('aria-checked', String(aan));
+  schakelaar.setAttribute('aria-label', naam);
+  schakelaar.addEventListener('click', async () => {
+    aan = !aan;
+    schakelaar.setAttribute('aria-checked', String(aan));
+    try {
+      await wissel(aan);
+    } catch {
+      aan = !aan;
+      schakelaar.setAttribute('aria-checked', String(aan));
+    }
+  });
+  rij.append(schakelaar);
+  return rij;
+}
+
+export function instellingen(terug: { google: () => void; opgeslagen: (inst: Instellingen) => void }) {
   const venster = document.getElementById('instellingen') as HTMLDialogElement;
   const inhoud = document.getElementById('instellingen-inhoud')!;
+  const naVerandering = terug.google;
 
-  async function tekenGoogle() {
+  async function bewaar(deel: Partial<Instellingen>) {
+    const inst: Instellingen = await stuur('/api/instellingen', 'PUT', deel);
+    terug.opgeslagen(inst);
+    return inst;
+  }
+
+  async function tekenAlgemeen() {
+    let inst: Instellingen;
+    try {
+      inst = await (await fetch('/api/instellingen')).json();
+    } catch {
+      return [maak('p', 'muted', 'De server is niet bereikbaar.')];
+    }
+
+    const blokken = maak('section', 'inst-sectie');
+    blokken.append(
+      maak('h3', 'lbl', 'BLOKKEN'),
+      maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren.'),
+    );
+    for (const [id, naam] of BLOKNAMEN)
+      blokken.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
+
+    const start = maak('section', 'inst-sectie');
+    start.append(maak('h3', 'lbl', 'STARTSCHERM'));
+    for (const [soort, naam] of [['breed', 'Op de pc'], ['smal', 'Op de telefoon']] as const) {
+      const rij = maak('div', 'lamp');
+      const segment = maak('div', 'segment inst-keuze');
+      const knoppen = (['thuis', 'overzicht'] as const).map((scherm) => {
+        const k = knop(scherm === 'thuis' ? 'Thuis' : 'Overzicht', '');
+        k.setAttribute('aria-pressed', String(inst.start[soort] === scherm));
+        k.addEventListener('click', async () => {
+          inst = await bewaar({ start: { ...inst.start, [soort]: scherm } });
+          knoppen.forEach((b) => b.setAttribute('aria-pressed', String(b === k)));
+        });
+        return k;
+      });
+      segment.append(...knoppen);
+      rij.append(maak('div', 'lamp-info', naam), segment);
+      start.append(rij);
+    }
+
+    const data = maak('section', 'inst-sectie');
+    data.append(
+      maak('h3', 'lbl', 'BELANGRIJKE DATA'),
+      maak('p', 'muted klein', 'Een deadline heeft alleen een einddatum. Vul ook "van" in voor een periode, zoals een stage.'),
+    );
+    const regels = maak('div');
+    const regel = (d?: Datum) => {
+      const r = maak('div', 'inst-datum');
+      r.dataset.id = d?.id ?? '';
+      const titel = maak('input', 'inst-veld');
+      titel.placeholder = 'Naam';
+      titel.maxLength = 80;
+      titel.value = d?.titel ?? '';
+      titel.setAttribute('aria-label', 'Naam');
+      const van = maak('input', 'inst-veld');
+      van.type = 'date';
+      van.value = d?.van ?? '';
+      van.setAttribute('aria-label', 'Van (optioneel)');
+      const tot = maak('input', 'inst-veld');
+      tot.type = 'date';
+      tot.value = d?.datum ?? '';
+      tot.setAttribute('aria-label', 'Datum of t/m');
+      const weg = knop('×', 'knop zacht');
+      weg.setAttribute('aria-label', 'Regel verwijderen');
+      weg.addEventListener('click', () => r.remove());
+      r.append(titel, van, tot, weg);
+      return r;
+    };
+    const kop = maak('div', 'inst-datum inst-kop');
+    kop.append(maak('span', 'klein muted', 'Naam'), maak('span', 'klein muted', 'Van (optioneel)'), maak('span', 'klein muted', 'Datum / t/m'), maak('span'));
+    regels.append(kop, ...inst.belangrijk.map(regel));
+    const toevoegen = knop('Regel toevoegen', 'knop zacht');
+    toevoegen.addEventListener('click', () => regels.append(regel()));
+    const opslaan = knop('Opslaan');
+    const melding = maak('p', 'klein muted');
+    melding.setAttribute('role', 'status');
+    opslaan.addEventListener('click', async () => {
+      const lijst = [...regels.querySelectorAll<HTMLElement>('.inst-datum[data-id]')]
+        .map((r) => {
+          const [titel, van, tot] = r.querySelectorAll('input');
+          return { id: r.dataset.id || undefined, titel: titel.value, van: van.value || null, datum: tot.value };
+        })
+        .filter((d) => d.titel.trim() || d.datum);
+      try {
+        inst = await bewaar({ belangrijk: lijst as Datum[] });
+        regels.replaceChildren(kop, ...inst.belangrijk.map(regel));
+        melding.textContent = 'Opgeslagen.';
+      } catch (fout) {
+        melding.textContent = (fout as Error).message;
+      }
+    });
+    const rij = maak('div', 'inst-rij');
+    rij.append(toevoegen, opslaan);
+    data.append(regels, rij, melding);
+
+    return [blokken, start, data];
+  }
+
+  async function teken() {
+    const google = maak('div');
+    inhoud.replaceChildren(...(await tekenAlgemeen()), google);
+    await tekenGoogle(google);
+  }
+
+  async function tekenGoogle(plek: HTMLElement) {
     const sectie = maak('section', 'inst-sectie');
     sectie.append(maak('h3', 'lbl', 'GOOGLE AGENDA EN GMAIL'));
-    inhoud.replaceChildren(sectie);
+    plek.replaceChildren(sectie);
     let status: GoogleStatus;
     try {
       status = await (await fetch('/api/google')).json();
@@ -84,7 +225,7 @@ export function instellingen(naVerandering: () => void) {
         try {
           await stuur('/api/google/koppel', 'POST', { adres: veld.value });
           naVerandering();
-          await tekenGoogle();
+          await tekenGoogle(plek);
         } catch (fout) {
           melding.textContent = (fout as Error).message;
           koppel.disabled = false;
@@ -125,14 +266,14 @@ export function instellingen(naVerandering: () => void) {
     ontkoppel.addEventListener('click', async () => {
       await stuur('/api/google', 'DELETE');
       naVerandering();
-      await tekenGoogle();
+      await tekenGoogle(plek);
     });
     sectie.append(ontkoppel);
   }
 
   document.getElementById('tandwiel')!.addEventListener('click', () => {
     venster.showModal();
-    tekenGoogle();
+    teken();
   });
   document.getElementById('instellingen-sluit')!.addEventListener('click', () => venster.close());
   // Klikken naast het venster sluit het ook.

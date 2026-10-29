@@ -1,6 +1,6 @@
 import './styles.css';
 import { lagen, type Ruimte } from './huis';
-import { instellingen } from './instellingen';
+import { instellingen, type Instellingen } from './instellingen';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -13,6 +13,7 @@ type Overzicht = {
   mailFout?: boolean;
   google?: { ingesteld: boolean; gekoppeld: boolean };
 };
+type Scherm = Instellingen['start']['breed'];
 type Lamp = { id: string; naam: string; aan: boolean; helderheid: number | null; bereikbaar: boolean };
 type Kamer = { id: string; naam: string; verdieping: string | null; temperatuur: number | null; lampen: Lamp[] };
 type Huis = {
@@ -39,6 +40,10 @@ const staat = {
   huis: null as Huis | null,
   overzicht: null as Overzicht | null,
   huisFout: false,
+  inst: null as Instellingen | null,
+  scherm: 'thuis' as Scherm,
+  /** Het huis is uitgezet, maar tijdelijk naar voren gehaald met de huisknop. */
+  huisVoor: false,
 };
 
 function tekst(el: HTMLElement, waarde: string) {
@@ -313,6 +318,92 @@ function tekenAlles() {
   tekenOpmerking();
 }
 
+// Schermen en blokken uit het tandwiel.
+function pasToe() {
+  const blokken = staat.inst?.blokken ?? {};
+  document.querySelectorAll<HTMLElement>('[data-blok]').forEach((el) => el.classList.toggle('uit', blokken[el.dataset.blok!] === false));
+  const overzicht = staat.scherm === 'overzicht';
+  const huisUit = blokken.huis === false;
+  const achter = overzicht || (huisUit && !staat.huisVoor);
+  const app = document.querySelector('.app')!;
+  app.classList.toggle('overzicht', overzicht);
+  app.classList.toggle('huis-achter', achter);
+  $('huis-knop-pil').hidden = !achter && !(huisUit && staat.huisVoor);
+  $('huis-knop').setAttribute('aria-pressed', String(!achter));
+  $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
+  tekst($('scherm-label'), overzicht ? 'ATLAS · OVERZICHT' : 'ATLAS · THUIS');
+  document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.scherm === staat.scherm)));
+}
+
+const dag = 86_400_000;
+const middag = (iso: string) => new Date(`${iso}T12:00:00`).getTime();
+const korteDatum = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+function tekenBelangrijk() {
+  const vandaag = middag(new Date().toLocaleDateString('sv-SE'));
+  const lijst = (staat.inst?.belangrijk ?? []).filter((d) => middag(d.datum) >= vandaag).slice(0, 4);
+  if (lijst.length === 0) {
+    $('belangrijk').replaceChildren(maak('p', 'muted klein', 'Voeg data toe via het tandwiel.'));
+    return;
+  }
+  $('belangrijk').replaceChildren(
+    ...lijst.map((d) => {
+      const rij = maak('div', 'datum-rij');
+      const eind = middag(d.datum);
+      const dagen = Math.round((eind - vandaag) / dag);
+      const datum = korteDatum.format(eind).replace('.', '');
+      let teller: string;
+      let detail: string;
+      let voortgang: number | null = null;
+      if (d.van && middag(d.van) > vandaag) {
+        const over = Math.round((middag(d.van) - vandaag) / dag);
+        teller = over === 1 ? 'morgen' : `over ${over} dagen`;
+        detail = `begint ${korteDatum.format(middag(d.van)).replace('.', '')} · t/m ${datum}`;
+      } else if (d.van) {
+        const begin = middag(d.van);
+        const weken = Math.max(1, Math.ceil((eind - begin + dag) / (7 * dag)));
+        const week = Math.min(weken, Math.floor((vandaag - begin) / (7 * dag)) + 1);
+        teller = `week ${week} / ${weken}`;
+        detail = `t/m ${datum} · nog ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`;
+        voortgang = Math.min(1, (vandaag - begin) / Math.max(dag, eind - begin));
+      } else {
+        if (dagen <= 7) rij.classList.add('dringend');
+        teller = dagen === 0 ? 'vandaag' : dagen === 1 ? 'morgen' : `nog ${dagen} dagen`;
+        detail = datum;
+      }
+      const kop = maak('div', 'kop');
+      kop.append(maak('strong', undefined, d.titel), maak('span', 'mono', teller));
+      rij.append(kop, maak('span', 'muted klein', detail));
+      if (voortgang != null) {
+        const balk = maak('div', 'balk');
+        const vul = maak('span');
+        vul.style.width = `${Math.round(voortgang * 100)}%`;
+        balk.append(vul);
+        rij.append(balk);
+      }
+      return rij;
+    }),
+  );
+}
+
+async function laadInstellingen() {
+  try {
+    const antwoord = await fetch('/api/instellingen');
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    zetInst(await antwoord.json(), true);
+  } catch (fout) {
+    console.error('Instellingen laden mislukt', fout);
+  }
+}
+
+function zetInst(inst: Instellingen, eerste = false) {
+  // Het huis net uitgezet of weer aangezet: dan geldt de nieuwe stand meteen.
+  if (inst.blokken.huis !== staat.inst?.blokken.huis) staat.huisVoor = false;
+  staat.inst = inst;
+  if (eerste) staat.scherm = inst.start[matchMedia('(max-width: 1000px)').matches ? 'smal' : 'breed'];
+  pasToe();
+  tekenBelangrijk();
+}
+
 function tekenOverzicht(o: Overzicht) {
   tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
   $('agenda').replaceChildren(
@@ -395,7 +486,26 @@ $('camera-wissel').addEventListener('click', () => {
 $<HTMLImageElement>('camera-beeld').addEventListener('load', (e) => ((e.target as HTMLImageElement).hidden = false));
 $<HTMLImageElement>('camera-beeld').addEventListener('error', (e) => ((e.target as HTMLImageElement).hidden = true));
 
-instellingen(laadOverzicht);
+document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((knop) => {
+  knop.addEventListener('click', () => {
+    staat.scherm = knop.dataset.scherm as Scherm;
+    staat.huisVoor = false;
+    pasToe();
+  });
+});
+$('huis-knop').addEventListener('click', () => {
+  if (staat.scherm === 'overzicht') {
+    staat.scherm = 'thuis';
+    staat.huisVoor = true;
+  } else staat.huisVoor = !staat.huisVoor;
+  pasToe();
+});
+
+instellingen({ google: laadOverzicht, opgeslagen: (inst) => zetInst(inst) });
+pasToe();
+tekenBelangrijk();
+laadInstellingen();
+setInterval(tekenBelangrijk, 3_600_000);
 tikKlok();
 setInterval(tikKlok, 1000);
 tekenAlles();
