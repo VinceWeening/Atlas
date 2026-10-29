@@ -1,7 +1,26 @@
 // Het tandwiel: blokken aan/uit, startscherm, belangrijke data en de Google-koppeling.
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
-export type Instellingen = { blokken: Record<string, boolean>; start: { breed: Scherm; smal: Scherm }; belangrijk: Datum[] };
+export type Meldingen = { pc: boolean; telefoon: boolean; toestel: string | null; soorten: string[]; camerasUit: string[]; wachttijd: number };
+export type Instellingen = {
+  blokken: Record<string, boolean>;
+  start: { breed: Scherm; smal: Scherm };
+  belangrijk: Datum[];
+  meldingen: Meldingen;
+};
+type Opties = { frigate: { ingesteld: boolean; bereikbaar: boolean }; cameras: string[]; toestellen: { id: string; naam: string }[]; soorten: string[] };
+
+const SOORTNAMEN: Record<string, string> = {
+  person: 'Personen',
+  car: "Auto's",
+  bicycle: 'Fietsen',
+  motorcycle: 'Motoren',
+  dog: 'Honden',
+  cat: 'Katten',
+  bird: 'Vogels',
+  package: 'Pakketten',
+};
+const cameraNaam = (camera: string) => camera.replace(/_/g, ' ').replace(/^\w/, (l) => l.toUpperCase());
 type Agenda = { id: string; naam: string; kleur: string | null; aan: boolean };
 type GoogleStatus = { ingesteld: boolean; gekoppeld: boolean; agendas: Agenda[] };
 
@@ -66,7 +85,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
   const inhoud = document.getElementById('instellingen-inhoud')!;
   const naVerandering = terug.google;
 
-  async function bewaar(deel: Partial<Instellingen>) {
+  async function bewaar(deel: { [K in keyof Instellingen]?: Partial<Instellingen[K]> }) {
     const inst: Instellingen = await stuur('/api/instellingen', 'PUT', deel);
     terug.opgeslagen(inst);
     return inst;
@@ -162,7 +181,101 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     rij.append(toevoegen, opslaan);
     data.append(regels, rij, melding);
 
-    return [blokken, start, data];
+    return [blokken, start, data, await tekenMeldingen(inst, (nieuw) => (inst = nieuw))];
+  }
+
+  async function tekenMeldingen(inst: Instellingen, zet: (inst: Instellingen) => void) {
+    const sectie = maak('section', 'inst-sectie');
+    sectie.append(maak('h3', 'lbl', 'MELDINGEN'));
+    let opties: Opties;
+    try {
+      opties = await (await fetch('/api/meldingen/opties')).json();
+    } catch {
+      sectie.append(maak('p', 'muted', 'De server is niet bereikbaar.'));
+      return sectie;
+    }
+    // Eigen kopie die meteen bijgewerkt wordt, zodat snel na elkaar klikken elkaar niet overschrijft.
+    const lokaal = { ...inst.meldingen };
+    const m = () => lokaal;
+    const bewaarM = async (deel: Partial<Meldingen>) => {
+      const vorig = { ...lokaal };
+      Object.assign(lokaal, deel);
+      try {
+        zet(await bewaar({ meldingen: deel }));
+      } catch (fout) {
+        Object.assign(lokaal, vorig);
+        throw fout;
+      }
+    };
+
+    if (!opties.frigate.ingesteld)
+      sectie.append(maak('p', 'muted klein', 'Frigate is nog niet ingesteld. Vul FRIGATE_URL in bij de app Atlas in ZimaOS, bijvoorbeeld http://192.168.1.76:5000. De stappen staan in de README.'));
+    else if (!opties.frigate.bereikbaar) sectie.append(maak('p', 'klein warm', 'Frigate reageert niet. Klopt FRIGATE_URL, en staat poort 5000 open?'));
+
+    sectie.append(
+      schakelaarRij('Op de pc', m().pc, (aan) => bewaarM({ pc: aan })),
+      schakelaarRij('Op de telefoon', m().telefoon, (aan) => bewaarM({ telefoon: aan })),
+    );
+
+    const toestelRij = maak('div', 'lamp');
+    const keuze = maak('select', 'kamer-keuze');
+    keuze.setAttribute('aria-label', 'Telefoon voor meldingen');
+    keuze.append(Object.assign(maak('option', undefined, opties.toestellen.length ? 'Kies je telefoon' : 'Geen telefoon gevonden'), { value: '' }));
+    for (const t of opties.toestellen) keuze.append(Object.assign(maak('option', undefined, t.naam), { value: t.id }));
+    keuze.value = m().toestel ?? '';
+    keuze.addEventListener('change', () => bewaarM({ toestel: keuze.value || null }));
+    toestelRij.append(maak('div', 'lamp-info', 'Telefoon'), keuze);
+    sectie.append(toestelRij);
+
+    sectie.append(maak('p', 'inst-label', 'Waarvoor'));
+    const soorten = maak('div', 'segment inst-keuze inst-chips');
+    for (const soort of opties.soorten) {
+      const k = knop(SOORTNAMEN[soort] ?? soort, '');
+      k.setAttribute('aria-pressed', String(m().soorten.includes(soort)));
+      k.addEventListener('click', async () => {
+        const aan = !m().soorten.includes(soort);
+        k.setAttribute('aria-pressed', String(aan));
+        await bewaarM({ soorten: aan ? [...m().soorten, soort] : m().soorten.filter((s) => s !== soort) }).catch(() => k.setAttribute('aria-pressed', String(!aan)));
+      });
+      soorten.append(k);
+    }
+    sectie.append(soorten);
+
+    if (opties.cameras.length) {
+      sectie.append(maak('p', 'inst-label', "Camera's"));
+      for (const camera of opties.cameras)
+        sectie.append(
+          schakelaarRij(cameraNaam(camera), !m().camerasUit.includes(camera), (aan) =>
+            bewaarM({ camerasUit: aan ? m().camerasUit.filter((c) => c !== camera) : [...m().camerasUit, camera] }),
+          ),
+        );
+    }
+
+    const wachtRij = maak('div', 'lamp');
+    const wacht = maak('select', 'kamer-keuze');
+    wacht.setAttribute('aria-label', 'Stilte na een melding');
+    for (const minuten of [0, 1, 2, 5, 10, 30])
+      wacht.append(Object.assign(maak('option', undefined, minuten === 0 ? 'Geen' : `${minuten} min`), { value: String(minuten) }));
+    wacht.value = String(m().wachttijd);
+    wacht.addEventListener('change', () => bewaarM({ wachttijd: Number(wacht.value) }));
+    wachtRij.append(maak('div', 'lamp-info', 'Stilte per camera na een melding'), wacht);
+    sectie.append(wachtRij);
+
+    const test = knop('Testmelding', 'knop zacht');
+    const melding = maak('p', 'klein muted');
+    melding.setAttribute('role', 'status');
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      try {
+        const { telefoon } = await stuur('/api/meldingen/test', 'POST');
+        melding.textContent = `Verstuurd. ${telefoon ?? ''}`.trim();
+      } catch (fout) {
+        melding.textContent = (fout as Error).message;
+      }
+      test.disabled = false;
+    });
+    sectie.append(test, melding);
+    return sectie;
   }
 
   async function teken() {

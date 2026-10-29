@@ -385,6 +385,45 @@ function tekenBelangrijk() {
   );
 }
 
+// Meldingen van Frigate in beeld, zolang de pagina open staat. De Windows-app laat ze ook zien als het venster verstopt is.
+type Melding = { volg: number; titel: string; tekst: string; beeld: string | null };
+let laatsteMelding: number | null = null;
+function toonMelding(m: Melding) {
+  const toast = maak('div', 'gl toast');
+  toast.setAttribute('role', 'status');
+  const binnen = maak('div', 'gl-in');
+  if (m.beeld) {
+    const beeld = maak('img');
+    beeld.alt = '';
+    beeld.src = m.beeld;
+    beeld.addEventListener('error', () => beeld.remove());
+    binnen.append(beeld);
+  }
+  const tekstDeel = maak('div');
+  tekstDeel.append(maak('strong', undefined, m.titel), maak('span', 'muted klein', m.tekst));
+  binnen.append(tekstDeel);
+  toast.append(binnen);
+  $('toasts').append(toast);
+  const weg = () => {
+    toast.classList.add('weg');
+    setTimeout(() => toast.remove(), 400);
+  };
+  toast.addEventListener('click', weg);
+  setTimeout(weg, 10_000);
+}
+async function laadMeldingen() {
+  try {
+    const antwoord = await fetch(`/api/meldingen${laatsteMelding == null ? '' : `?na=${laatsteMelding}`}`);
+    if (!antwoord.ok) return;
+    const data = (await antwoord.json()) as { laatste: number; meldingen: Melding[] };
+    // De eerste keer alleen onthouden waar we zijn, anders komen oude meldingen opnieuw voorbij.
+    if (laatsteMelding != null && data.laatste >= laatsteMelding) data.meldingen.slice(-3).forEach(toonMelding);
+    laatsteMelding = data.laatste;
+  } catch {
+    // De server is even weg; de volgende ronde probeert het opnieuw.
+  }
+}
+
 async function laadInstellingen() {
   try {
     const antwoord = await fetch('/api/instellingen');
@@ -505,6 +544,8 @@ instellingen({ google: laadOverzicht, opgeslagen: (inst) => zetInst(inst) });
 pasToe();
 tekenBelangrijk();
 laadInstellingen();
+laadMeldingen();
+setInterval(laadMeldingen, 5_000);
 setInterval(tekenBelangrijk, 3_600_000);
 tikKlok();
 setInterval(tikKlok, 1000);
