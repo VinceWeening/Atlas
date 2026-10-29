@@ -77,7 +77,8 @@ export class Apps {
       ),
     );
     const telling: Record<string, number> = {};
-    for (const g of gebeurtenissen ?? []) telling[g.label] = (telling[g.label] ?? 0) + 1;
+    // Alleen wat in het tandwiel bij Meldingen aan staat, bijvoorbeeld alleen personen en geen fietsen.
+    for (const g of gebeurtenissen ?? []) if (soorten.includes(g.label)) telling[g.label] = (telling[g.label] ?? 0) + 1;
     const laatste = (gebeurtenissen ?? [])
       .filter((g) => soorten.includes(g.label))
       .sort((a, b) => b.start_time - a.start_time)

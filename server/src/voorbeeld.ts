@@ -10,9 +10,9 @@ export const voorbeeld = {
   ],
   morgen: '09:00 · Overleg',
   mail: [
-    { van: 'Bol.com', onderwerp: 'Pakket komt morgen' },
-    { van: 'Gemeente', onderwerp: 'Afvalkalender 2027' },
-    { van: 'Jellyfin', onderwerp: 'Nieuwe film' },
+    { van: 'Bol.com', onderwerp: 'Pakket komt morgen', stukje: 'Je bestelling wordt morgen tussen 14:00 en 17:00 bezorgd.', tijd: null },
+    { van: 'Gemeente Heiloo', onderwerp: 'Afvalkalender 2027', stukje: 'De nieuwe afvalkalender staat klaar in de app.', tijd: null },
+    { van: 'Jellyfin', onderwerp: 'Nieuwe film', stukje: 'Er is een nieuwe film toegevoegd aan je bibliotheek.', tijd: null },
   ],
 };
 

@@ -8,7 +8,7 @@ type Overzicht = {
   weer: { omschrijving: string; temperatuur: number };
   agenda: { tijd: string; titel: string; detail: string; kleur?: string | null }[];
   morgen: string;
-  mail: { van: string; onderwerp: string; link?: string }[];
+  mail: { van: string; onderwerp: string; stukje?: string; tijd?: string | null; link?: string }[];
   mailAantal?: number;
   agendaFout?: boolean;
   mailFout?: boolean;
@@ -103,7 +103,10 @@ function tekenHuis() {
     vlak.style.boxShadow = gestapeld
       ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
       : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
-    const naam = maak('span', 'lbl laag-naam', laag.label);
+    // Op de naam van een verdieping klikken gaat naar die verdieping, en nog een keer klikken terug naar alles.
+    const naam = maak('button', 'lbl laag-naam', laag.label);
+    naam.type = 'button';
+    naam.addEventListener('click', () => kiesVerdieping(staat.verdieping === laag.id ? 'alle' : laag.id));
     if (staat.verdieping === laag.id) naam.style.color = '#D6EDFF';
     vlak.append(naam);
 
@@ -146,19 +149,25 @@ function tekenHuis() {
   huis.replaceChildren(gebouw);
 }
 
+// Verdiepingen van boven naar beneden, zoals je ze in het huis ziet. Scrollen boven het huis loopt deze lijst af.
+const VERDIEPINGEN = ['alle', ...[...lagen].reverse().map((l) => l.id)];
+function kiesVerdieping(id: string) {
+  staat.verdieping = id;
+  tekenAlles();
+}
+
 function tekenKnoppen() {
-  const opties = [{ id: 'alle', naam: 'Alles' }, ...lagen.map((l) => ({ id: l.id, naam: l.id === 'v1' ? '1e' : l.naam }))];
+  const opties = VERDIEPINGEN.map((id) => ({ id, naam: id === 'alle' ? 'Alles' : lagen.find((l) => l.id === id)!.naam }));
   $('verdiepingen').replaceChildren(
     ...opties.map((o) => {
-      const knop = maak('button', undefined, o.naam);
+      const knop = maak('button', 'rail-knop');
       knop.type = 'button';
       knop.setAttribute('aria-pressed', String(staat.verdieping === o.id));
-      knop.addEventListener('click', () => {
-        staat.verdieping = o.id;
-        tekenAlles();
-      });
+      knop.append(maak('span', 'rail-stip'), maak('span', 'rail-naam', o.naam));
+      knop.addEventListener('click', () => kiesVerdieping(o.id));
       return knop;
     }),
+    maak('span', 'rail-hint', 'scroll'),
   );
   document.querySelectorAll<HTMLButtonElement>('[data-modus]').forEach((knop) => {
     knop.setAttribute('aria-pressed', String(knop.dataset.modus === staat.modus));
@@ -407,18 +416,21 @@ function tekenBelangrijk() {
 type Melding = { volg: number; titel: string; tekst: string; beeld: string | null };
 let laatsteMelding: number | null = null;
 function toonMelding(m: Melding) {
-  const toast = maak('div', 'gl toast');
-  toast.setAttribute('role', 'status');
+  const toast = maak('button', 'gl toast');
+  toast.type = 'button';
+  toast.setAttribute('aria-label', `${m.titel}, ${m.tekst}. Open de camera's`);
   const binnen = maak('div', 'gl-in');
   if (m.beeld) {
-    const beeld = maak('img');
+    const beeld = maak('img', 'toast-beeld');
     beeld.alt = '';
     beeld.src = m.beeld;
     beeld.addEventListener('error', () => beeld.remove());
     binnen.append(beeld);
   }
-  const tekstDeel = maak('div');
-  tekstDeel.append(maak('strong', undefined, m.titel), maak('span', 'muted klein', m.tekst));
+  const tekstDeel = maak('div', 'toast-tekst');
+  const kop = maak('div', 'toast-kop');
+  kop.append(maak('span', 'stip'), maak('strong', undefined, m.titel));
+  tekstDeel.append(kop, maak('span', 'muted klein', m.tekst));
   binnen.append(tekstDeel);
   toast.append(binnen);
   $('toasts').append(toast);
@@ -426,8 +438,13 @@ function toonMelding(m: Melding) {
     toast.classList.add('weg');
     setTimeout(() => toast.remove(), 400);
   };
-  toast.addEventListener('click', weg);
-  setTimeout(weg, 10_000);
+  // Klikken opent het scherm met alle camera's.
+  toast.addEventListener('click', () => {
+    weg();
+    staat.scherm = 'cameras';
+    pasToe();
+  });
+  setTimeout(weg, 12_000);
 }
 async function laadMeldingen() {
   try {
@@ -637,6 +654,20 @@ function zetInst(inst: Instellingen, eerste = false) {
   if (!eerste) laadApps();
 }
 
+// Een vaste kleurtint per afzender, zodat je ze herkent.
+const tint = (tekst: string) => [...tekst].reduce((h, l) => (h * 31 + l.charCodeAt(0)) % 360, 7);
+const aantalTekst = (o: Overzicht) => {
+  const n = o.mailAantal ?? o.mail.length;
+  return o.voorbeeld ? `${n} ongelezen` : `${n} belangrijk`;
+};
+function wanneer(iso: string) {
+  const d = new Date(iso);
+  const vandaag = new Date().toDateString();
+  if (d.toDateString() === vandaag) return uur(iso);
+  if (d.toDateString() === new Date(Date.now() - 86_400_000).toDateString()) return 'gisteren';
+  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+}
+
 function tekenOverzicht(o: Overzicht) {
   tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
   $('agenda').replaceChildren(
@@ -652,17 +683,25 @@ function tekenOverzicht(o: Overzicht) {
   );
   tekst($('morgen'), o.morgen ? `Morgen ${o.morgen}` : 'Morgen niets gepland');
   const aantal = o.mailAantal ?? o.mail.length;
-  tekst($('mail-aantal'), o.mailFout ? 'niet bereikbaar' : o.voorbeeld ? `${aantal} ongelezen` : `${aantal} belangrijk`);
+  tekst($('mail-aantal'), o.mailFout ? 'niet bereikbaar' : aantalTekst(o));
   $('mail').replaceChildren(
-    ...(o.mail.length === 0 && !o.mailFout ? [maak('p', 'muted klein', 'Geen belangrijke mail.')] : []),
+    ...(o.mail.length === 0 && !o.mailFout ? [maak('p', 'muted klein', 'Geen belangrijke mail. Lekker rustig.')] : []),
     ...o.mail.map((m) => {
       const rij = maak(m.link ? 'a' : 'div', 'mailregel');
       if (m.link && rij instanceof HTMLAnchorElement) {
         rij.href = m.link;
         rij.target = '_blank';
         rij.rel = 'noopener';
+        rij.setAttribute('aria-label', `Mail van ${m.van}: ${m.onderwerp}`);
       }
-      rij.append(maak('strong', undefined, m.van), maak('span', 'muted', m.onderwerp));
+      const letter = maak('span', 'mail-letter', (m.van.match(/[\p{L}\p{N}]/u)?.[0] ?? '?').toUpperCase());
+      letter.style.setProperty('--tint', String(tint(m.van)));
+      const tekstDeel = maak('div', 'mail-tekst');
+      const kop = maak('div', 'mail-kop');
+      kop.append(maak('strong', undefined, m.van), maak('span', 'mono muted klein', m.tijd ? wanneer(m.tijd) : ''));
+      tekstDeel.append(kop, maak('span', 'mail-onderwerp', m.onderwerp));
+      if (m.stukje) tekstDeel.append(maak('span', 'muted klein mail-stukje', m.stukje));
+      rij.append(letter, tekstDeel);
       return rij;
     }),
   );
@@ -707,6 +746,21 @@ document.querySelectorAll<HTMLButtonElement>('[data-modus]').forEach((knop) => {
     tekenAlles();
   });
 });
+let laatsteScroll = 0;
+$('huis').addEventListener(
+  'wheel',
+  (e) => {
+    if (document.querySelector('.app')!.classList.contains('huis-achter') || Math.abs(e.deltaY) < 4) return;
+    e.preventDefault();
+    // Eén stap per scrollbeweging, ook bij een touchpad dat veel kleine stapjes geeft.
+    if (Date.now() - laatsteScroll < 450) return;
+    laatsteScroll = Date.now();
+    const nu = VERDIEPINGEN.indexOf(staat.verdieping);
+    const volgende = Math.max(0, Math.min(VERDIEPINGEN.length - 1, nu + Math.sign(e.deltaY)));
+    if (volgende !== nu) kiesVerdieping(VERDIEPINGEN[volgende]);
+  },
+  { passive: false },
+);
 $<HTMLSelectElement>('kamer-keuze').addEventListener('change', (e) => {
   const id = (e.target as HTMLSelectElement).value || null;
   staat.kamer = id;

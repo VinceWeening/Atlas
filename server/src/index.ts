@@ -116,6 +116,12 @@ app.get('/api/meldingen/opties', async () => {
 
 app.post('/api/meldingen/test', async () => ({ telefoon: await meldingen.test() }));
 
+app.get<{ Params: { camera: string } }>('/api/meldingen/camera/:camera/beeld', async (request, reply) => {
+  const beeld = await meldingen.cameraBeeld(request.params.camera).catch(() => null);
+  if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
+  return reply.header('cache-control', 'no-store').type(beeld.type).send(beeld.data);
+});
+
 app.get<{ Params: { id: string } }>('/api/meldingen/:id/beeld', async (request, reply) => {
   const beeld = await meldingen.beeld(request.params.id).catch(() => null);
   if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
