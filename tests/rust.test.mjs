@@ -26,7 +26,7 @@ test('oude instellingen houden hun kanalen en blokkeuzes bij uitbreiding', () =>
   assert.equal(basis.meldingen.wachttijd, 10);
   assert.equal(basis.blokken.camera, false);
   assert.deepEqual(basis.ingevouwen, ['energie']);
-  assert.deepEqual(basis.weergave, { rustig: true, beweging: false, agendaAantal: 3, mailAantal: 3 });
+  assert.deepEqual(basis.weergave, { rustig: true, beweging: true, agendaAantal: 3, mailAantal: 3 });
 });
 
 test('ongeldige instellingen worden atomair geweigerd', () => {
