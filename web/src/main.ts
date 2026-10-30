@@ -48,7 +48,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 const staat = {
   verdieping: 'alle',
-  modus: '3d' as '2d' | '3d',
+  modus: '3d' as '2d' | '3d' | 'vrij',
   /** Gekozen ruimte op de plattegrond, of null als er een ruimte uit de keuzelijst is gekozen. */
   gekozen: 'bureau' as string | null,
   /** Gekozen ruimte in Home Assistant. */
@@ -85,7 +85,7 @@ function maak<K extends keyof HTMLElementTagNameMap>(tag: K, klasse?: string, in
   return el;
 }
 
-const graden = (t: number) => `${t.toLocaleString('nl-NL', { maximumFractionDigits: 1 })} °C`;
+const graden = (t: number) => `${t.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}°`;
 const uur = (iso: string) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
 // Klok en dagboog
@@ -109,8 +109,46 @@ function ruimteBij(kamerId: string): Ruimte | undefined {
 }
 const lichtAan = (r: Ruimte) => !!kamerBij(r)?.lampen.some((l) => l.aan);
 
+// Het draaibare 3D-model (three.js) laadt pas als je het voor het eerst kiest.
+let huis3d: { zet: (s: { gekozen: string | null; verdieping: string }) => void; start: () => void; stop: () => void } | null = null;
+let huis3dLaden: Promise<void> | null = null;
+const huis3dVak = maak('div', 'huis3d');
+function tekenHuis3d() {
+  const huis = $('huis');
+  huis.classList.add('vrij');
+  if (huis.firstChild !== huis3dVak) huis.replaceChildren(huis3dVak);
+  const zet = () => {
+    huis3d!.zet({ gekozen: staat.gekozen, verdieping: staat.verdieping });
+    huis3d!.start();
+  };
+  if (huis3d) return zet();
+  huis3dLaden ??= import('./huis3d')
+    .then(({ maakHuis3d }) => {
+      huis3d = maakHuis3d(huis3dVak, {
+        kies: (r) => {
+          staat.gekozen = r.id;
+          staat.kamer = kamerBij(r)?.id ?? null;
+          tekenAlles();
+        },
+        info: (r) => {
+          const k = kamerBij(r);
+          return { aan: lichtAan(r), temp: k?.temperatuur != null ? graden(k.temperatuur) : '' };
+        },
+      });
+      if (staat.modus === 'vrij') zet();
+    })
+    .catch(() => {
+      meldFout('Het 3D-model laden lukte niet');
+      staat.modus = '3d';
+      tekenAlles();
+    });
+}
+
 function tekenHuis() {
   const huis = $('huis');
+  if (staat.modus === 'vrij') return tekenHuis3d();
+  huis.classList.remove('vrij');
+  huis3d?.stop();
   const driedee = staat.modus === '3d';
   // In 3D blijft het hele huis staan; een gekozen verdieping komt in focus en de rest blijft vaag zichtbaar. In 2D zie je
   // alleen de gekozen verdieping (of de begane grond bij Alles).
@@ -514,16 +552,28 @@ function tekenWeer() {
   tekst($('weer'), weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '');
 }
 
-/** Een regel onderin, alleen zolang iets echt nog voorbeeld is. */
+/** Een kleine chip in de bovenbalk, alleen zolang iets echt nog voorbeeld is. Klikken opent wat er nog gekoppeld moet. */
 function tekenOpmerking() {
   const opmerking = $('voorbeeld');
   const huis = staat.huis?.bron === 'voorbeeld';
   const google = !!staat.overzicht?.voorbeeld;
-  if (huis && google) tekst(opmerking, 'Voorbeeldgegevens · stel Home Assistant in en koppel Google via het tandwiel');
-  else if (huis) tekst(opmerking, 'Het huis is voorbeeld · stel Home Assistant in om je eigen huis te zien');
-  else tekst(opmerking, 'Agenda en mail zijn voorbeeld · koppel Google via het tandwiel');
+  const uitleg = huis && google
+    ? 'Voorbeeldgegevens: stel Home Assistant in en koppel Google'
+    : huis
+      ? 'Het huis is voorbeeld: stel Home Assistant in om je eigen huis te zien'
+      : 'Agenda en mail zijn voorbeeld: koppel Google';
+  opmerking.title = uitleg;
+  opmerking.setAttribute('aria-label', `${uitleg}. Open de koppelingen.`);
   opmerking.hidden = !huis && !google;
 }
+$('voorbeeld').addEventListener('click', () => {
+  try {
+    localStorage.setItem('atlas-inst-tab', 'koppelingen');
+  } catch {
+    // Dan opent het tandwiel op het laatste tabblad.
+  }
+  $('tandwiel').click();
+});
 
 function tekenAlles() {
   tekenKnoppen();
@@ -572,7 +622,7 @@ function pasToe() {
     void (app as HTMLElement).offsetWidth;
     app.classList.add('wissel');
     clearTimeout(wisselKlaar);
-    wisselKlaar = setTimeout(() => app.classList.remove('wissel'), 1200);
+    wisselKlaar = setTimeout(() => app.classList.remove('wissel'), 700);
   }
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
@@ -693,7 +743,7 @@ function toonMelding(m: Melding) {
   $('toasts').append(toast);
   const weg = () => {
     toast.classList.add('weg');
-    setTimeout(() => toast.remove(), 400);
+    setTimeout(() => toast.remove(), 220);
   };
   // Klikken opent het scherm met alle camera's.
   toast.addEventListener('click', () => {
@@ -764,6 +814,8 @@ function plaatje(src: string, klasse: string) {
 function zetLink(id: string, poort: number | undefined) {
   const link = document.querySelector<HTMLAnchorElement>(`[data-app-link="${id}"]`)!;
   link.hidden = !poort;
+  // Niet gevonden: het blok verdwijnt van Overzicht. Waarom staat bij tandwiel › Koppelingen.
+  link.closest('section')?.classList.toggle('leeg', !poort);
   if (poort) link.href = appAdres(poort);
 }
 
@@ -929,7 +981,8 @@ function tekenStand() {
   const weer = staat.huis?.weer ?? o?.weer;
   const weerTekst = weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '';
   const datum = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-  tekst($('dagstart-label'), stand === 'ochtend' ? `${datum}${weerTekst ? ` · ${weerTekst}` : ''}` : 'Avond');
+  const uurNu = new Date().getHours();
+  tekst($('dagstart-label'), stand === 'ochtend' ? `${datum}${weerTekst ? ` · ${weerTekst}` : ''}` : uurNu >= 23 || uurNu < 5 ? 'Nacht' : 'Avond');
   tekst($('dagstart-titel'), begroeting());
   let zin: string;
   if (stand === 'ochtend') {
@@ -1139,7 +1192,7 @@ async function laadHuis() {
 
 document.querySelectorAll<HTMLButtonElement>('[data-modus]').forEach((knop) => {
   knop.addEventListener('click', () => {
-    staat.modus = knop.dataset.modus as '2d' | '3d';
+    staat.modus = knop.dataset.modus as '2d' | '3d' | 'vrij';
     tekenAlles();
   });
 });
@@ -1147,7 +1200,8 @@ let laatsteScroll = 0;
 $('huis').addEventListener(
   'wheel',
   (e) => {
-    if (document.querySelector('.app')!.classList.contains('huis-achter') || Math.abs(e.deltaY) < 4) return;
+    // In de draaistand zoomt scrollen in het model zelf.
+    if (staat.modus === 'vrij' || document.querySelector('.app')!.classList.contains('huis-achter') || Math.abs(e.deltaY) < 4) return;
     e.preventDefault();
     // Eén stap per scrollbeweging, ook bij een touchpad dat veel kleine stapjes geeft.
     if (Date.now() - laatsteScroll < 450) return;
@@ -1262,6 +1316,7 @@ const opdracht = startOpdracht({
     tips.push('Welke lampen zijn aan?', 'Hoe warm is het?');
     return tips;
   },
+  hardop: () => staat.inst?.assistent?.hardop !== false,
 });
 $('opdracht-knop').addEventListener('click', () => opdracht.open());
 $('spraak-orb').addEventListener('click', () => opdracht.open(true));

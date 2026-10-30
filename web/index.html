@@ -21,13 +21,6 @@
 <div class="app">
   <div class="lucht" id="lucht" aria-hidden="true"></div>
   <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
-  <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
-    <div class="rail-knoppen" id="verdiepingen"></div>
-    <div class="segment modus" role="group" aria-label="Weergave van het huis">
-      <button type="button" data-modus="2d">2D</button>
-      <button type="button" data-modus="3d">3D</button>
-    </div>
-  </nav>
 
   <div class="stage">
     <header class="gl bovenbalk"><div class="gl-in balk-in">
@@ -39,7 +32,7 @@
           <circle id="dagboog" cx="110" cy="110" r="76" fill="none" stroke="url(#arc)" stroke-width="18" stroke-linecap="round" stroke-dasharray="0 478" transform="rotate(-90 110 110)"/>
         </svg>
         <p class="tijd mono" id="tijd">--:--</p>
-        <p class="muted klein klok-regel"><span id="datum"></span> · <span class="warm" id="weer"></span></p>
+        <p class="muted klein klok-regel"><span id="datum"></span> · <span id="weer"></span></p>
       </section>
 
       <nav class="segment schermen" aria-label="Schermen">
@@ -50,6 +43,7 @@
       </nav>
 
       <div class="balk-rechts">
+        <button type="button" class="hud-chip voorbeeld-chip" id="voorbeeld" hidden>Voorbeeld</button>
         <div class="hud" id="hud" data-blok="hud" aria-label="Status van het huis"></div>
         <button type="button" class="rond-knop" id="huis-knop" aria-pressed="false" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></button>
         <button type="button" class="rond-knop" id="opdracht-knop" data-blok="opdracht" aria-label="Opdracht geven" aria-keyshortcuts="Control+K" title="Opdracht geven (Ctrl+K)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M19 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></button>
@@ -113,9 +107,17 @@
     <!-- Onderin: de spraakbol (alleen als die aan staat) en één dock met favorieten en knoppen. -->
     <div class="midden-onder" id="plek-dock">
       <div class="spraak" data-blok="spraak">
-        <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in"></button>
+        <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in" aria-keyshortcuts="Control+Space" title="Spreken (Ctrl+Spatie)"></button>
         <span class="lbl zacht" id="spraak-label">Tik en spreek</span>
       </div>
+      <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
+        <div class="rail-knoppen" id="verdiepingen"></div>
+        <div class="segment modus" role="group" aria-label="Weergave van het huis">
+          <button type="button" data-modus="2d">2D</button>
+          <button type="button" data-modus="3d">3D</button>
+          <button type="button" data-modus="vrij" aria-label="Draaibaar 3D-model">Draai</button>
+        </div>
+      </nav>
       <div class="gl pil dock" id="dock"><div class="gl-in segment dock-in">
         <div class="dock-deel" id="dock-favorieten" data-blok="favorieten"></div>
         <span class="dock-scheiding" id="dock-scheiding" aria-hidden="true"></span>
@@ -181,7 +183,6 @@
       <div class="opnames" id="opnames-lijst"></div>
     </section>
 
-    <p class="voorbeeld" id="voorbeeld" hidden></p>
   </div>
 
   <dialog class="gl instellingen camera-groot" id="opname" aria-labelledby="opname-titel"><div class="gl-in paneel">
@@ -202,7 +203,7 @@
     <div id="instellingen-inhoud"></div>
   </div></dialog>
 
-  <!-- Opdrachtbalk: typ of zeg wat Atlas moet doen. Ctrl+K of / opent hem, de spraakbol ook. -->
+  <!-- Opdrachtbalk: typ of zeg wat Atlas moet doen. Ctrl+K of / opent hem, de spraakbol ook; Ctrl+Spatie begint meteen met luisteren. -->
   <dialog class="gl opdracht" id="opdracht" aria-label="Opdracht geven"><div class="gl-in">
     <form class="opdracht-vorm" id="opdracht-vorm" method="dialog">
       <svg class="opdracht-teken" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/></svg>

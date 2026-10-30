@@ -54,6 +54,13 @@ export type Instellingen = {
   };
   /** Vertrekhulp: reistijd naar plekken in je agenda. */
   vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
+  /** Spraak en de lokale AI. Werkt alleen als OLLAMA_URL of WHISPER_URL is ingesteld. */
+  assistent: {
+    /** Vrije vragen ("wat moet ik vandaag nog doen?") beantwoorden met de lokale AI. */
+    vragen: boolean;
+    /** Antwoorden hardop uitspreken als je iets zei. */
+    hardop: boolean;
+  };
 };
 
 const standaard: Instellingen = {
@@ -77,6 +84,7 @@ const standaard: Instellingen = {
   standen: { ochtend: { aan: true, van: '06:00', tot: '10:00' }, avond: { aan: true, van: '21:00', tot: '01:00' } },
   weg: { aan: false, allesUit: true, alleenWeg: false },
   vertrek: { reistijd: 20, plekken: [] },
+  assistent: { vragen: true, hardop: true },
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
@@ -89,6 +97,7 @@ huidig.namen ??= {};
 huidig.standen = { ...standaard.standen, ...huidig.standen };
 huidig.weg = { ...standaard.weg, ...huidig.weg };
 huidig.vertrek = { ...standaard.vertrek, ...huidig.vertrek };
+huidig.assistent = { ...standaard.assistent, ...huidig.assistent };
 
 export const instellingen = () => huidig;
 
@@ -174,6 +183,15 @@ export function zetInstellingen(nieuw: unknown): string | null {
       if (w[sleutel] === undefined) continue;
       if (typeof w[sleutel] !== 'boolean') return 'Ongeldige instelling thuis en weg';
       volgende.weg[sleutel] = w[sleutel]!;
+    }
+  }
+  if (n.assistent !== undefined) {
+    const a = n.assistent as Partial<Instellingen['assistent']> | null;
+    if (!a || typeof a !== 'object') return 'Ongeldige instelling spraak en AI';
+    for (const sleutel of ['vragen', 'hardop'] as const) {
+      if (a[sleutel] === undefined) continue;
+      if (typeof a[sleutel] !== 'boolean') return 'Ongeldige instelling spraak en AI';
+      volgende.assistent[sleutel] = a[sleutel]!;
     }
   }
   if (n.vertrek !== undefined) {

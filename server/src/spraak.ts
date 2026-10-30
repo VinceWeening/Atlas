@@ -6,6 +6,32 @@ const adres = process.env.WHISPER_URL?.trim().replace(/\/+$/, '') || null;
 const model = process.env.WHISPER_MODEL?.trim() || 'Systran/faster-whisper-small';
 
 export const spraakAan = () => !!adres;
+export const spraakModel = model;
+
+/** Haalt het Whisper-model op als de server het nog niet heeft (Speaches doet dat niet vanzelf). */
+export async function zorgVoorSpraakModel(log: { info: (m: string) => void; warn: (m: string) => void }) {
+  if (!adres) return;
+  try {
+    const lijst = (await (await fetch(`${adres}/v1/models`, { signal: AbortSignal.timeout(5000) })).json()) as { data?: { id: string }[] };
+    if (lijst.data?.some((m) => m.id === model)) return;
+    log.info(`Spraak: model ${model} ophalen`);
+    const antwoord = await fetch(`${adres}/v1/models/${model}`, { method: 'POST', signal: AbortSignal.timeout(30 * 60_000) });
+    log.info(`Spraak: model ${model} ${antwoord.ok ? 'staat klaar' : `niet opgehaald (${antwoord.status})`}`);
+  } catch {
+    log.warn('Spraak: Whisper-server niet bereikbaar, model niet gecontroleerd');
+  }
+}
+
+/** Of de Whisper-server antwoordt; voor het controlescherm. */
+export async function spraakBereikbaar() {
+  if (!adres) return null;
+  try {
+    const antwoord = await fetch(`${adres}/v1/models`, { signal: AbortSignal.timeout(4000) });
+    return antwoord.status < 500;
+  } catch {
+    return false;
+  }
+}
 
 export async function naarTekst(audio: Buffer, type: string) {
   if (!adres) throw new Error('Geen WHISPER_URL ingesteld');

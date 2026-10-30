@@ -2,7 +2,7 @@
 // venster, de microfoon en het antwoord. Spraak gebruikt de spraakherkenning van de browser als die er is (Chrome, Edge,
 // Safari op iPhone); anders typ je.
 
-type Antwoord = { tekst: string; gedaan: boolean; scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras' };
+type Antwoord = { tekst: string; gedaan: boolean; scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras'; begrepen?: string; ai?: boolean };
 type Opties = {
   /** Of de opdrachtbalk aan staat in het tandwiel. */
   aan: () => boolean;
@@ -11,6 +11,8 @@ type Opties = {
   ververs: () => void;
   /** Voorbeeldzinnen met de echte namen uit het huis. */
   tips: () => string[];
+  /** Of een antwoord hardop mag als je iets zei (tandwiel › Spraak en AI). */
+  hardop: () => boolean;
 };
 
 type Herkenning = {
@@ -44,24 +46,38 @@ export function startOpdracht(opties: Opties) {
 
   // Staat er een eigen Whisper-server klaar, dan gaat spraak daarheen: dat blijft thuis en werkt ook in de Windows-app.
   let serverSpraak = false;
+  // Beantwoordt de lokale AI vrije vragen, dan staat er ook een vraag tussen de voorbeelden.
+  let vragen = false;
   let opname: { stop: () => void } | null = null;
   mic.hidden = !HerkenningKlasse;
   fetch('/api/spraak')
     .then((a) => (a.ok ? a.json() : { aan: false }))
-    .then((d: { aan: boolean }) => {
+    .then((d: { aan: boolean; vragen?: boolean }) => {
       serverSpraak = d.aan && kanOpnemen;
+      vragen = !!d.vragen;
       mic.hidden = !HerkenningKlasse && !serverSpraak;
     })
     .catch(() => {});
 
-  const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' = 'gewoon') => {
+  const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' | 'denkt' | 'ai' = 'gewoon') => {
     antwoord.textContent = tekst;
     antwoord.dataset.soort = soort;
+    // Opnieuw afspelen: het nieuwe antwoord komt zacht binnen, ook als het vorige er nog stond.
+    antwoord.classList.remove('nieuw');
+    void antwoord.offsetWidth;
+    antwoord.classList.add('nieuw');
+    if (soort === 'ai') {
+      // Klein erachter: dit kwam van de lokale AI, niet uit Home Assistant.
+      const bron = document.createElement('span');
+      bron.className = 'opdracht-bron';
+      bron.textContent = 'lokale AI';
+      antwoord.append(bron);
+    }
   };
 
   const tekenTips = () => {
     tips.replaceChildren(
-      ...opties.tips().map((tip) => {
+      ...[...opties.tips(), ...(vragen ? ['Wat staat er vandaag nog?'] : [])].map((tip) => {
         const knop = document.createElement('button');
         knop.type = 'button';
         knop.className = 'opdracht-tip';
@@ -113,13 +129,20 @@ export function startOpdracht(opties: Opties) {
     geschiedenis.unshift(tekst);
     geschiedenis.splice(10);
     terug = -1;
+    // Een vraag aan de lokale AI duurt een paar seconden; dan laten zien dat Atlas nadenkt.
+    const denkt = setTimeout(() => zeg('Even nadenken…', 'denkt'), 900);
     try {
       const a = await fetch('/api/opdracht', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tekst }) });
       const data = (await a.json()) as Antwoord & { fout?: string };
       if (!a.ok) throw new Error(data.fout ?? `Server gaf ${a.status}`);
-      zeg(data.tekst, data.gedaan ? 'gedaan' : 'gewoon');
-      if (gesproken) spreek(data.tekst);
-      if (data.gedaan) opties.ververs();
+      // Herschreef de lokale AI de zin, dan zie je wat Atlas ervan maakte.
+      zeg(data.begrepen ? `${data.tekst} (begrepen als “${data.begrepen}”)` : data.tekst, data.gedaan ? 'gedaan' : data.ai ? 'ai' : 'gewoon');
+      if (gesproken && opties.hardop()) spreek(data.tekst);
+      if (data.gedaan) {
+        opties.ververs();
+        // De voorbeelden volgen het huis: was de woonkamer net uitgezet, dan staat er nu "woonkamer aan".
+        setTimeout(tekenTips, 900);
+      }
       veld.value = '';
       if (data.scherm) {
         opties.naarScherm(data.scherm);
@@ -128,6 +151,7 @@ export function startOpdracht(opties: Opties) {
     } catch (fout) {
       zeg(fout instanceof Error ? fout.message : 'Dat lukte niet', 'fout');
     } finally {
+      clearTimeout(denkt);
       bezig = false;
       venster.removeAttribute('aria-busy');
     }
@@ -276,6 +300,10 @@ export function startOpdracht(opties: Opties) {
     if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey) && !e.altKey) {
       if (venster.open) sluit();
       else open();
+      e.preventDefault();
+    } else if (e.code === 'Space' && e.ctrlKey && !e.altKey && !e.metaKey) {
+      // Ctrl+Spatie: meteen spreken, ook als het venster nog dicht is. Nog een keer stopt het luisteren.
+      open(true);
       e.preventDefault();
     } else if (e.key === '/' && !inVeld && !document.querySelector('dialog[open]')) {
       open();

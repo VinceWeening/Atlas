@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Kleine JSON-bestanden in de datamap (in Docker een eigen volume), zodat koppelingen en instellingen een herstart overleven.
-const map = process.env.DATA_DIR ?? join(process.cwd(), 'data');
+export const map = process.env.DATA_DIR ?? join(process.cwd(), 'data');
 mkdirSync(map, { recursive: true });
 
 export function lees<T>(naam: string, standaard: T): T {

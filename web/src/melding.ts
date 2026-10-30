@@ -22,7 +22,7 @@ export function meldFout(tekst: string) {
   plek.append(bericht);
   setTimeout(() => {
     bericht.classList.add('weg');
-    setTimeout(() => bericht.remove(), 400);
+    setTimeout(() => bericht.remove(), 220);
   }, 5_000);
 }
 
