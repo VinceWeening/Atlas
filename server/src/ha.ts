@@ -1,3 +1,5 @@
+import { type Energie, energieUit, kiesMeters, middernacht } from './energie.js';
+
 // Koppeling met Home Assistant via de REST-API. Atlas vraagt zelf op welke ruimtes, lampen, camera's en scènes er zijn,
 // dus er hoeft niets per lamp ingesteld te worden.
 
@@ -157,10 +159,18 @@ function lampDelen(t: Toestand): Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtem
   };
 }
 
+/** De naam uit Home Assistant, of anders een leesbare naam uit de entiteit: sensor.woonkamer_temp wordt "Woonkamer temp". */
+function vriendelijk(t: Toestand) {
+  const naam = t.attributes.friendly_name?.trim();
+  if (naam) return naam;
+  const deel = t.entity_id.split('.').slice(1).join('.').replace(/_/g, ' ').trim();
+  return deel ? deel.replace(/^\w/, (l) => l.toUpperCase()) : t.entity_id;
+}
+
 function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
   const soort = t.entity_id.split('.')[0];
   const a = t.attributes;
-  let naam = a.friendly_name ?? t.entity_id;
+  let naam = vriendelijk(t);
   // "Woonkamer Staande lamp" in de ruimte Woonkamer heet gewoon "Staande lamp".
   if (ruimte && naam.toLowerCase().startsWith(`${ruimte.toLowerCase()} `) && naam.length > ruimte.length + 1)
     naam = naam.slice(ruimte.length + 1).replace(/^\w/, (l) => l.toUpperCase());
@@ -214,6 +224,8 @@ const weerNamen: Record<string, string> = {
 
 export class HomeAssistant {
   private ruimtes: { tijd: number; lijst: Ruimte[] } | null = null;
+  /** Meterstanden om middernacht, één keer per dag opgehaald. */
+  private begin: { dag: number; standen: Record<string, number> } | null = null;
 
   constructor(private readonly instellingen: HaInstellingen) {}
 
@@ -246,7 +258,7 @@ export class HomeAssistant {
       }),
     ]);
     const perId = new Map(toestanden.map((t) => [t.entity_id, t]));
-    const naam = (t: Toestand) => t.attributes.friendly_name ?? t.entity_id;
+    const naam = vriendelijk;
     const kamerVan = new Map<string, string>();
     for (const r of ruimtes) for (const e of r.entiteiten) kamerVan.set(e, r.id);
 
@@ -307,6 +319,38 @@ export class HomeAssistant {
     const binnen = binnenTemps.length ? Math.round((binnenTemps.reduce((a, b) => a + b, 0) / binnenTemps.length) * 10) / 10 : null;
 
     return { bron: 'home-assistant', kamers, losseLampen, cameras, scenes, weer, binnen };
+  }
+
+  /** Stroom, gas, opwek en het klimaat per ruimte. */
+  async energie(): Promise<Energie> {
+    const [toestanden, ruimtes] = await Promise.all([
+      this.vraag('/api/states').then((a) => a.json() as Promise<Toestand[]>),
+      this.haalRuimtes().catch(() => [] as Ruimte[]),
+    ]);
+    const meters = kiesMeters(toestanden);
+    const ids = [...meters.stroom, ...meters.terug, ...meters.gas, ...meters.opwek];
+    return energieUit(toestanden, ruimtes, meters, await this.standenOmMiddernacht(ids).catch(() => ({})));
+  }
+
+  /** De stand van elke meter om middernacht, uit de geschiedenis van Home Assistant. */
+  private async standenOmMiddernacht(ids: string[]) {
+    const begin = middernacht();
+    const nieuw = ids.filter((id) => this.begin?.dag !== begin.getTime() || !(id in this.begin.standen));
+    if (this.begin?.dag !== begin.getTime()) this.begin = { dag: begin.getTime(), standen: {} };
+    if (nieuw.length) {
+      // Alleen de eerste minuut na middernacht: de eerste waarde is dan de stand op het begin van de dag.
+      const tot = new Date(begin.getTime() + 60_000).toISOString();
+      const pad = `/api/history/period/${begin.toISOString()}?end_time=${encodeURIComponent(tot)}&filter_entity_id=${nieuw.join(',')}&minimal_response&no_attributes`;
+      const reeksen = (await (await this.vraag(pad)).json()) as { entity_id?: string; state: string }[][];
+      reeksen.forEach((reeks, i) => {
+        const id = reeks[0]?.entity_id ?? nieuw[i];
+        const n = Number(reeks.find((r) => Number.isFinite(Number(r.state)) && r.state !== '')?.state);
+        if (Number.isFinite(n)) this.begin!.standen[id] = n;
+      });
+      // Geen geschiedenis van een meter: niet elke minuut opnieuw vragen. NaN betekent "onbekend vandaag".
+      for (const id of nieuw) if (!(id in this.begin!.standen)) this.begin!.standen[id] = NaN;
+    }
+    return this.begin!.standen;
   }
 
   /** Alles uit Home Assistant dat ertoe doet, per ruimte. */
@@ -440,10 +484,75 @@ export class HomeAssistant {
       .map((id) => ({ id, naam: id.slice('mobile_app_'.length).replace(/_/g, ' ') }));
   }
 
-  async melding(toestel: string, titel: string, tekst: string) {
+  /** Een melding op de telefoon; met acties krijgt hij knoppen, die Atlas via de websocket terughoort. */
+  async melding(toestel: string, titel: string, tekst: string, acties: { action: string; title: string }[] = []) {
     await this.vraag(`/api/services/notify/${toestel}`, {
       method: 'POST',
-      body: JSON.stringify({ title: titel, message: tekst, data: { group: 'atlas', tag: `atlas-${titel}` } }),
+      body: JSON.stringify({ title: titel, message: tekst, data: { group: 'atlas', tag: `atlas-${titel}`, ...(acties.length ? { actions: acties } : {}) } }),
     });
   }
+
+  /** De personen in Home Assistant en of ze thuis zijn (via de app op hun telefoon). */
+  async personen(): Promise<Persoon[]> {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return toestanden
+      .filter((t) => t.entity_id.startsWith('person.') && t.state !== 'unknown' && t.state !== 'unavailable')
+      .map((t) => ({ id: t.entity_id, naam: vriendelijk(t), thuis: t.state === 'home' }));
+  }
+
+  /**
+   * Ophaaldagen van het afval. Werkt met de integraties Afvalwijzer (ook HVC in Heiloo) en Waste Collection Schedule:
+   * Atlas zoekt sensoren met afval in de naam en een datum als stand.
+   */
+  async afval(): Promise<Afval[]> {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return afvalUit(toestanden);
+  }
+
+  /** Lampen die nu aan zijn, voor "Alles uit?". */
+  async lampenAan() {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return toestanden.filter((t) => t.entity_id.startsWith('light.') && t.state === 'on').map((t) => t.entity_id);
+  }
+
+  /** Adres en toegangscode, voor de websocket van Home Assistant. */
+  get verbinding() {
+    return this.instellingen;
+  }
+}
+
+export type Persoon = { id: string; naam: string; thuis: boolean };
+export type Afval = { id: string; naam: string; datum: string };
+
+const AFVAL = /afval|waste|gft|pmd|restafval|rest_afval|papier|plastic|kca|textiel|kerstbomen|groente|grofvuil|container/i;
+// Hulpsensoren van Afvalwijzer die zelf geen soort afval zijn.
+const AFVAL_HULP = /today|tomorrow|vandaag|morgen|first_next|eerstvolgende|day_after|overmorgen|next_type|next_date|last_update/i;
+
+/** Een datum als 2026-10-31, 31-10-2026 of 31/10/2026, of een aantal dagen vanaf vandaag. */
+function afvalDatum(t: Toestand, vandaag: string) {
+  const s = t.state.trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const dagen = Number(t.attributes.daysTo ?? t.attributes.days_until_collection_date ?? t.attributes.days);
+  if (Number.isInteger(dagen) && dagen >= 0) {
+    const d = new Date(`${vandaag}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dagen);
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+export function afvalUit(toestanden: Toestand[], nu = new Date()): Afval[] {
+  const vandaag = nu.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  const lijst: Afval[] = [];
+  for (const t of toestanden) {
+    if (!t.entity_id.startsWith('sensor.') || !AFVAL.test(`${t.entity_id} ${t.attributes.friendly_name ?? ''}`) || AFVAL_HULP.test(t.entity_id)) continue;
+    const datum = afvalDatum(t, vandaag);
+    if (!datum || datum < vandaag) continue;
+    const naam = vriendelijk(t).replace(/^(afvalwijzer|waste collection|afval)\s*/i, '').trim() || vriendelijk(t);
+    lijst.push({ id: t.entity_id, naam: naam.length <= 4 ? naam.toUpperCase() : naam.replace(/^\w/, (l) => l.toUpperCase()), datum });
+  }
+  return lijst.sort((a, b) => a.datum.localeCompare(b.datum) || a.naam.localeCompare(b.naam, 'nl'));
 }

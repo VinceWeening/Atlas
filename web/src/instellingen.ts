@@ -1,4 +1,6 @@
 // Het tandwiel: blokken aan/uit, startscherm, belangrijke data en de Google-koppeling.
+import { meldFout } from './melding';
+
 type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
 export type Meldingen = {
@@ -10,7 +12,10 @@ export type Meldingen = {
   wachttijd: number;
   zones: string[];
   bekenden: string[];
+  stil: Periode;
 };
+/** Een stuk van de dag, zoals 23:00 tot 07:00; mag over middernacht gaan. */
+export type Periode = { aan: boolean; van: string; tot: string };
 export type Instellingen = {
   blokken: Record<string, boolean>;
   start: { breed: Scherm; smal: Scherm };
@@ -18,6 +23,10 @@ export type Instellingen = {
   meldingen: Meldingen;
   favorieten: string[];
   snelkoppelingen: string[];
+  namen: Record<string, string>;
+  standen: { ochtend: Periode; avond: Periode };
+  weg: { aan: boolean; allesUit: boolean; alleenWeg: boolean };
+  vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -69,25 +78,55 @@ async function stuur(adres: string, methode: string, body?: unknown) {
 const BIJWERKEN =
   'sudo docker pull ghcr.io/vinceweening/atlas:latest && cd "$(sudo docker inspect atlas --format \'{{ index .Config.Labels "com.docker.compose.project.working_dir" }}\')" && sudo docker compose up -d';
 
-const BLOKNAMEN: [string, string][] = [
-  ['huis', 'Huis (plattegrond)'],
-  ['vandaag', 'Vandaag'],
-  ['belangrijk', 'Belangrijk'],
-  ['mail', 'Mail'],
-  ['kamer', 'Kamer en lampen'],
-  ['favorieten', 'Favorieten'],
-  ['camera', 'Camera'],
-  ['scenes', 'Scènes'],
-  ['hud', 'Statusregel boven'],
-  ['frigate', 'Frigate'],
-  ['jellyfin', 'Jellyfin'],
-  ['seerr', 'Seerr (aanvragen)'],
-  ['downloads', 'Downloads (Sonarr en Radarr)'],
+// Blokken per plek, met één regel uitleg, zodat je weet wat je aan- of uitzet.
+const BLOKGROEPEN: [string, [string, string, string][]][] = [
+  [
+    'Thuis en Overzicht',
+    [
+      ['huis', 'Huis', 'Het 3D-huis in het midden van Thuis'],
+      ['vandaag', 'Vandaag', 'Afspraken van vandaag en morgen'],
+      ['belangrijk', 'Belangrijk', 'Deadlines en periodes uit het tabblad Data'],
+      ['mail', 'Mail', 'Belangrijke mail uit Gmail'],
+      ['kamer', 'Kamer', 'De gekozen kamer met al zijn lampen'],
+      ['camera', 'Camera', 'Beeld van de voordeur en andere camera’s'],
+      ['favorieten', 'Favorieten', 'Lampen met een ster, in het dock onderin'],
+      ['scenes', 'Knoppen onderin', 'Scènes of je eigen knoppen in het dock'],
+      ['hud', 'Status bovenin', 'Temperatuur binnen, lampen aan en de voordeur'],
+      ['tijdlijn', 'Vandaag gezien', 'Wie of wat de camera’s vandaag zagen, op Overzicht'],
+      ['energie', 'Energie en klimaat', 'Stroom, gas, zon en de temperatuur per ruimte, op Overzicht'],
+      ['vertrek', 'Vertrekhulp', 'Hoe laat je weg moet voor je volgende afspraak, en of het regent'],
+      ['afval', 'Afvalkalender', 'Ophaaldagen bij Belangrijk, en ’s avonds wat er morgen buiten moet'],
+    ],
+  ],
+  [
+    'Overzicht: media en server',
+    [
+      ['jellyfin', 'Verder kijken', 'Wat je in Jellyfin aan het kijken bent'],
+      ['downloads', 'Downloads', 'Sonarr en Radarr'],
+      ['seerr', 'Aanvragen', 'Seerr: wat er wacht en wat er klaar is'],
+      ['frigate', 'Frigate', 'Wat de camera’s vandaag zagen'],
+    ],
+  ],
+  [
+    'Extra',
+    [
+      ['lucht', 'Lucht zoals buiten', 'Licht of donker met de zon en maan op hun echte plek'],
+      ['opdracht', 'Opdrachtbalk', 'Ctrl+K of /: typ wat Atlas moet doen, zoals ‘woonkamer uit’'],
+      ['spraak', 'Spraakbol', 'Onderin: tik en spreek een opdracht in'],
+      ['sneltoetsen', 'Sneltoetsen', '1 t/m 4 voor de schermen, pijltjes voor de verdiepingen'],
+    ],
+  ],
 ];
 
-function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>) {
+function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Promise<void>, uitleg?: string) {
   const rij = maak('div', 'lamp');
-  rij.append(maak('div', 'lamp-info', naam));
+  const info = maak('div', 'lamp-info');
+  if (uitleg) {
+    const namen = maak('span');
+    namen.append(naam, maak('small', undefined, uitleg));
+    info.append(namen);
+  } else info.textContent = naam;
+  rij.append(info);
   const schakelaar = knop('', 'schakelaar');
   schakelaar.setAttribute('role', 'switch');
   schakelaar.setAttribute('aria-checked', String(aan));
@@ -100,9 +139,39 @@ function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Pro
     } catch {
       aan = !aan;
       schakelaar.setAttribute('aria-checked', String(aan));
+      meldFout('Bewaren lukte niet');
     }
   });
   rij.append(schakelaar);
+  return rij;
+}
+
+/** Een rij met een schakelaar en twee tijden (van, tot), voor de standen en de stille uren. */
+function periodeRij(naam: string, uitleg: string, p: Periode, bewaar: (p: Periode) => Promise<void>) {
+  const rij = schakelaarRij(naam, p.aan, (aan) => bewaar((p = { ...p, aan })), uitleg);
+  const tijden = maak('div', 'inst-tijden');
+  for (const deel of ['van', 'tot'] as const) {
+    const veld = maak('input', 'inst-veld tijd-veld');
+    veld.type = 'time';
+    veld.value = p[deel];
+    veld.setAttribute('aria-label', `${naam} ${deel}`);
+    veld.addEventListener('change', async () => {
+      if (!/^\d{2}:\d{2}$/.test(veld.value)) return;
+      const vorig = p;
+      p = { ...p, [deel]: veld.value };
+      try {
+        await bewaar(p);
+      } catch {
+        p = vorig;
+        veld.value = vorig[deel];
+        meldFout('Bewaren lukte niet');
+      }
+    });
+    tijden.append(veld);
+    if (deel === 'van') tijden.append(maak('span', 'muted klein', 'tot'));
+  }
+  rij.classList.add('periode');
+  rij.append(tijden);
   return rij;
 }
 
@@ -128,12 +197,22 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     const blokken = maak('section', 'inst-sectie');
     blokken.append(
       maak('h3', 'lbl', 'BLOKKEN'),
-      maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren.'),
+      maak('p', 'muted klein', 'Staat het huis uit, dan gaat het naar de achtergrond. Met de huisknop bovenin haal je het weer naar voren. Lege blokken verdwijnen vanzelf.'),
     );
-    const raster = maak('div', 'inst-raster');
-    for (const [id, naam] of BLOKNAMEN)
-      raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } }))));
-    blokken.append(raster);
+    for (const [groep, lijst] of BLOKGROEPEN) {
+      const raster = maak('div', 'inst-raster');
+      for (const [id, naam, uitleg] of lijst)
+        raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } })), uitleg));
+      blokken.append(maak('p', 'inst-label', groep), raster);
+    }
+
+    const standen = maak('section', 'inst-sectie');
+    standen.append(
+      maak('h3', 'lbl', 'OCHTEND EN AVOND'),
+      maak('p', 'muted klein', 'In de ochtendstand staat je dag bovenaan. In de avondstand wordt het rustig: alleen de kamer, de camera en de knoppen, met wat er morgen is.'),
+      periodeRij('Ochtendstand', 'Je agenda en wat belangrijk is groot bovenaan', inst.standen.ochtend, async (p) => void (inst = await bewaar({ standen: { ...inst.standen, ochtend: p } }))),
+      periodeRij('Avondstand', 'Rust: geen mail en agenda, wel morgen in één regel', inst.standen.avond, async (p) => void (inst = await bewaar({ standen: { ...inst.standen, avond: p } }))),
+    );
 
     const start = maak('section', 'inst-sectie');
     start.append(maak('h3', 'lbl', 'STARTSCHERM'));
@@ -209,15 +288,85 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     rij.append(toevoegen, opslaan);
     data.append(regels, rij, melding);
 
+    // Vertrekhulp: een vaste reistijd, en per plek een eigen tijd. De plek wordt herkend in de titel of de locatie.
+    const vertrek = maak('section', 'inst-sectie');
+    vertrek.append(
+      maak('h3', 'lbl', 'VERTREKHULP'),
+      maak('p', 'muted klein', 'Atlas rekent terug vanaf je volgende afspraak met een locatie. Zet per plek een eigen reistijd, één per regel, zoals “Xafax = 25”. Die naam mag in de titel of de locatie van de afspraak staan.'),
+    );
+    const reistijdRij = maak('div', 'lamp');
+    const reistijd = maak('input', 'inst-veld getal-veld');
+    reistijd.type = 'number';
+    reistijd.min = '0';
+    reistijd.max = '300';
+    reistijd.value = String(inst.vertrek.reistijd);
+    reistijd.setAttribute('aria-label', 'Standaard reistijd in minuten');
+    const tijdVak = maak('div', 'inst-tijden');
+    tijdVak.append(reistijd, maak('span', 'muted klein', 'min'));
+    reistijdRij.append(maak('div', 'lamp-info', 'Standaard reistijd'), tijdVak);
+    const plekken = maak('textarea', 'inst-veld inst-tekstvak');
+    plekken.rows = 3;
+    plekken.placeholder = 'Xafax = 25\nSportschool = 10';
+    plekken.value = inst.vertrek.plekken.map((p) => `${p.naam} = ${p.minuten}`).join('\n');
+    plekken.setAttribute('aria-label', 'Plekken met reistijd');
+    const vertrekOpslaan = knop('Opslaan');
+    const vertrekMelding = maak('p', 'klein muted');
+    vertrekMelding.setAttribute('role', 'status');
+    vertrekOpslaan.addEventListener('click', async () => {
+      const lijst = plekken.value
+        .split('\n')
+        .map((r) => r.match(/^(.+?)\s*[=:]\s*(\d+)\s*(min.*)?$/))
+        .filter((m): m is RegExpMatchArray => !!m)
+        .map((m) => ({ naam: m[1].trim(), minuten: Number(m[2]) }));
+      try {
+        inst = await bewaar({ vertrek: { reistijd: Number(reistijd.value) || 0, plekken: lijst } });
+        plekken.value = inst.vertrek.plekken.map((p) => `${p.naam} = ${p.minuten}`).join('\n');
+        vertrekMelding.textContent = 'Opgeslagen.';
+      } catch (fout) {
+        vertrekMelding.textContent = (fout as Error).message;
+      }
+    });
+    vertrek.append(reistijdRij, plekken, vertrekOpslaan, vertrekMelding);
+
     return {
-      scherm: [blokken, start],
-      data: [data],
-      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw))],
+      scherm: [blokken, standen, start],
+      data: [data, vertrek],
+      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw)), await tekenWeg(inst, (nieuw) => (inst = nieuw))],
       knoppen: [await tekenSnelkoppelingen(inst)],
     };
   }
 
-  /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de pijl-knop bij Apparaten. */
+  /** Thuis en weg: via de personen in Home Assistant. */
+  async function tekenWeg(inst: Instellingen, zet: (inst: Instellingen) => void) {
+    const sectie = maak('section', 'inst-sectie');
+    sectie.append(
+      maak('h3', 'lbl', 'THUIS EN WEG'),
+      maak('p', 'muted klein', 'Atlas weet of je thuis bent via de personen in Home Assistant (de app op je telefoon). De meldingen gaan naar de telefoon die hierboven gekozen is.'),
+    );
+    const status = maak('p', 'klein muted');
+    try {
+      const a = (await (await fetch('/api/aanwezig')).json()) as { personen: { naam: string; thuis: boolean }[] };
+      status.textContent = a.personen.length
+        ? `Gevonden: ${a.personen.map((p) => `${p.naam} (${p.thuis ? 'thuis' : 'weg'})`).join(', ')}`
+        : 'Nog geen personen gevonden in Home Assistant. Voeg je telefoon toe aan een persoon onder Instellingen › Personen.';
+    } catch {
+      status.textContent = '';
+    }
+    const lokaal = { ...inst.weg };
+    const bewaarW = async (deel: Partial<Instellingen['weg']>) => {
+      Object.assign(lokaal, deel);
+      zet(await bewaar({ weg: deel }));
+    };
+    sectie.append(
+      status,
+      schakelaarRij('Thuis en weg', lokaal.aan, (aan) => bewaarW({ aan }), 'Hoofdschakelaar voor de twee hieronder'),
+      schakelaarRij('“Alles uit?” als je weggaat', lokaal.allesUit, (aan) => bewaarW({ allesUit: aan }), 'Eén melding met een knop, alleen als er nog lampen branden'),
+      schakelaarRij('Camera’s alleen als je weg bent', lokaal.alleenWeg, (aan) => bewaarW({ alleenWeg: aan }), 'Op de telefoon; de pc meldt altijd'),
+    );
+    return sectie;
+  }
+
+  /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de punaise bij Apparaten. */
   async function tekenSnelkoppelingen(inst: Instellingen) {
     const sectie = maak('section', 'inst-sectie');
     sectie.append(maak('h3', 'lbl', 'KNOPPEN ONDERIN'));
@@ -232,7 +381,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     const teken = () => {
       const ids = inst.snelkoppelingen;
       if (!ids.length) {
-        lijst.replaceChildren(maak('p', 'muted klein', 'Nu staan alle scènes onderin. Kies zelf knoppen met de pijl-knop bij een lamp, schakelaar of scène in Apparaten.'));
+        lijst.replaceChildren(maak('p', 'muted klein', 'Nu staan alle scènes onderin. Kies zelf knoppen met de punaise bij een lamp, schakelaar of scène in Apparaten.'));
         return;
       }
       lijst.replaceChildren(
@@ -293,6 +442,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     sectie.append(
       schakelaarRij('Op de pc', m().pc, (aan) => bewaarM({ pc: aan })),
       schakelaarRij('Op de telefoon', m().telefoon, (aan) => bewaarM({ telefoon: aan })),
+      periodeRij('Stille uren', 'Geen meldingen; wat er was staat ’s ochtends in Vandaag gezien', m().stil, (p) => bewaarM({ stil: p })),
     );
 
     const toestelRij = maak('div', 'lamp');

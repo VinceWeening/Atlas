@@ -93,6 +93,63 @@ Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor
 
 Daarna kies je in het tandwiel welke agenda's Atlas laat zien. De koppeling staat in het volume `atlas-data`, dus een update van Atlas laat hem staan.
 
+## Atlas op je telefoon
+
+Atlas werkt op de telefoon als een gewone app, met een eigen icoon en zonder adresbalk.
+
+1. Zet Tailscale aan op je telefoon.
+2. Open Atlas in Safari (iPhone) of Chrome (Android) via de Tailscale-naam van je server, bijvoorbeeld `http://zimaos:8790`.
+3. iPhone: tik op Deel › **Zet op beginscherm**. Android: menu › **App installeren**.
+
+Voor de snelste versie, die ook opent als de verbinding even hapert, heeft de telefoon een `https://`-adres nodig. Dat kan met Tailscale zelf. Zet in de Tailscale-beheerpagina **HTTPS Certificates** aan (DNS › HTTPS) en draai dan eenmalig in de terminal van ZimaOS:
+
+```sh
+sudo tailscale serve --bg 8790
+```
+
+Atlas staat dan op `https://<naam-van-je-server>.<jouw-tailnet>.ts.net`. Zet dat adres op je beginscherm.
+
+## Ochtend, avond, lucht en stille uren
+
+- **Ochtendstand** (standaard 6:00 tot 10:00): een begroeting met je afspraken en de eerstvolgende deadline bovenaan.
+- **Avondstand** (standaard 21:00 tot 1:00): alleen nog de kamer, de camera en de knoppen, met wat er morgen is.
+- **Lucht zoals buiten**: de achtergrond is licht, schemerig of donker zoals het nu in Heiloo is, met de zon of de maan (in de juiste fase) op hun plek.
+- **Stille uren** (bij Meldingen, standaard uit): geen meldingen op pc of telefoon. Wat de camera's zagen, staat wel in **Vandaag gezien** op Overzicht en bij Camera's.
+
+Alles is aan en uit te zetten in het tandwiel, en de tijden zijn aan te passen.
+
+## Energie en klimaat
+
+Het blok **Energie en klimaat** op Overzicht zoekt de meters zelf in Home Assistant: een P1-meter (DSMR of HomeWizard) voor stroom en teruglevering, de gasmeter, zonnepanelen (SolarEdge, omvormer) voor opwek, de eerste thermostaat (`climate.*`) en per ruimte de temperatuur en luchtvochtigheid. Het verbruik van vandaag is de meterstand nu min die om middernacht, uit de geschiedenis van Home Assistant. Slimme stekkers telt Atlas bewust niet mee als "het huis". Zonder meters of sensoren verdwijnt het blok vanzelf.
+
+## Opdrachtbalk en spraak
+
+Druk **Ctrl+K** of **/** (of tik op het sterretje rechtsboven) en typ wat Atlas moet doen:
+
+- `woonkamer uit`, `keuken aan`, `alle lampen uit`
+- `dim bureau naar 30%`, `bureau feller`
+- `filmavond` (een scène), `welterusten` (scène Slapen, of alle lampen uit)
+- `hoe warm is het in de keuken`, `welke lampen zijn aan`, `hoeveel stroom gebruiken we`
+- `ga naar camera's`
+
+Atlas begrijpt een vaste set zinnen (geen AI) en bedient alleen lampen, schakelaars en scènes; sloten nooit. Met het blok **Spraakbol** aan tik je op de bol onderin en spreek je de opdracht in; het antwoord komt dan ook hardop. Dat gebruikt de spraakherkenning van de browser (Chrome, Edge, Safari op de iPhone). Werkt die niet, dan typ je.
+
+### Spraak die thuis blijft (Whisper)
+
+De Windows-app heeft geen spraakherkenning van de browser. Met een eigen Whisper-server werkt spraak overal, en blijft je stem thuis:
+
+1. Haal in `docker-compose.yml` de `#` weg bij de dienst `whisper` en bij `whisper-modellen`, en installeer opnieuw.
+2. Laat de server het model één keer downloaden: `curl -X POST http://<server>:8000/v1/models/Systran/faster-whisper-small` (zie de documentatie van Speaches als dat niet werkt).
+3. Zet bij Atlas `WHISPER_URL` op `http://host.docker.internal:8000` en start Atlas opnieuw.
+
+Daarna neemt de spraakbol op tot je even stil bent, stuurt de opname naar Whisper en voert de opdracht uit. Elke server die `/v1/audio/transcriptions` kent werkt.
+
+## Thuis en weg, vertrekhulp en afval
+
+- **Thuis en weg** (tandwiel › Meldingen, staat uit): Atlas volgt de personen in Home Assistant. Gaat de laatste weg terwijl er lampen branden, dan krijg je op je telefoon één melding met de knop *Alles uit*. Atlas hoort die knop via de websocket van Home Assistant. Met *Camera's alleen als je weg bent* blijft je telefoon stil als er iemand thuis is (de pc meldt altijd).
+- **Vertrekhulp**: voor je volgende afspraak met een locatie rekent Atlas terug met de reistijd uit tandwiel › Data (een vaste tijd, of per plek zoals `Xafax = 25`). De regen komt van Buienradar voor Heiloo (andere plek: `ATLAS_LAT` en `ATLAS_LON`).
+- **Afvalkalender**: installeer in Home Assistant de integratie *Afvalwijzer* (kies HVC voor Heiloo) of *Waste Collection Schedule*. Atlas vindt de sensoren zelf en zet de ophaaldagen van vandaag tot overmorgen bij Belangrijk; 's avonds staat erbij wat er morgen aan de straat moet.
+
 ## Het tandwiel
 
 Het tandwiel heeft tabbladen: Scherm, Data, Meldingen, Knoppen en Koppelingen.

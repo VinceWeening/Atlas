@@ -32,6 +32,21 @@ services:
       SEERR_KEY: ""
       SONARR_KEY: ""
       RADARR_KEY: ""
+      # Spraak die thuis blijft (zie README): adres van je eigen Whisper-server, bijvoorbeeld http://host.docker.internal:8000.
+      # Leeg = de app gebruikt de spraakherkenning van de browser (werkt niet in de Windows-app).
+      WHISPER_URL: ""
+      WHISPER_MODEL: "Systran/faster-whisper-small"
+
+  # Optioneel: een eigen Whisper-server voor spraak. Haal de # weg om hem mee te installeren (ongeveer 1 GB geheugen).
+  # whisper:
+  #   image: ghcr.io/speaches-ai/speaches:latest-cpu
+  #   container_name: atlas-whisper
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - whisper-modellen:/home/ubuntu/.cache/huggingface/hub
 
 volumes:
   atlas-data:
+  # whisper-modellen:

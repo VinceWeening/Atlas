@@ -1,5 +1,6 @@
 // De schermen Apparaten (alles uit Home Assistant per ruimte) en Camera's (alle camera's tegelijk).
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
+import { meldFout, post } from './melding';
 
 type Apparaat = {
   id: string;
@@ -44,12 +45,54 @@ const FILTERS: [string, string, string[] | null][] = [
   ['personen', 'Personen', ['person']],
 ];
 
-const staat = { filter: 'alles', zoek: '', data: null as Apparaten | null, fout: false, bezig: new Set<string>() };
+const staat = { filter: 'alles', zoek: '', data: null as Apparaten | null, fout: false, bezig: new Set<string>(), bewerkt: null as string | null };
 
-type Lijsten = { heeft: (lijst: 'favorieten' | 'snelkoppelingen', id: string) => boolean; wissel: (lijst: 'favorieten' | 'snelkoppelingen', id: string) => Promise<void> };
+type Lijst = 'favorieten' | 'snelkoppelingen';
+type Lijsten = {
+  heeft: (lijst: Lijst, id: string) => boolean;
+  wissel: (lijst: Lijst, id: string) => Promise<void>;
+  hernoem: (id: string, naam: string) => Promise<void>;
+};
 
-const STER = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>';
-const ONDERIN = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="15" width="18" height="6" rx="3"/><path d="M12 3v8m-3.5-3.5L12 11l3.5-3.5"/></svg>';
+const svg = (pad: string, vul = false) =>
+  `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="${vul ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${pad}</svg>`;
+const STER = svg('<path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/>', true);
+// Een punaise: vastzetten in het dock onderin.
+const PUNAISE = svg('<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 15v6"/>', true);
+const POTLOOD = svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
+
+// Kleine lijn-iconen per soort apparaat, zodat lange lijsten niet allemaal op elkaar lijken.
+const ICONEN: Record<string, string> = {
+  light: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/>',
+  switch: '<path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/>',
+  input_boolean: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2"/>',
+  fan: '<circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s2 5-2 7M14 12c4 0 7 1 7 4s-5 2-7-2M12 14c0 4-1 7-4 7s-2-5 2-7M10 12c-4 0-7-1-7-4s5-2 7 2"/>',
+  cover: '<path d="M4 4h16M5 4v16h14V4M5 9h14M5 14h14"/>',
+  sensor: '<path d="M10 14V5a2 2 0 1 1 4 0v9a4 4 0 1 1-4 0z"/>',
+  binary_sensor: '<circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+  climate: '<path d="M10 14V5a2 2 0 1 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 11v6"/>',
+  weather: '<path d="M7 18a4 4 0 1 1 .5-8A5.5 5.5 0 0 1 18 11a3.5 3.5 0 0 1 0 7z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  media_player: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/>',
+  vacuum: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/>',
+  scene: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  script: '<path d="m8 6-5 6 5 6M16 6l5 6-5 6"/>',
+  person: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+};
+const icoon = (soort: string) => {
+  const span = maak('span', 'soort-icoon');
+  span.innerHTML = svg(ICONEN[soort] ?? '<circle cx="12" cy="12" r="4"/>');
+  return span;
+};
+
+// Apparaten zonder ruimte in Home Assistant, in groepen in plaats van één grote bak.
+const GROEPEN: [string, string[]][] = [
+  ['Scènes en scripts', ['scene', 'script']],
+  ['Lampen en schakelaars', ['light', 'switch', 'fan', 'input_boolean', 'cover']],
+  ['Media', ['media_player', 'vacuum']],
+  ['Sensoren', ['sensor', 'binary_sensor', 'climate', 'weather', 'lock']],
+  ['Personen', ['person']],
+];
 
 export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   const pagina = document.getElementById('pagina-apparaten')!;
@@ -77,21 +120,46 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     if (a.bediening === 'schakel') a.aan = aan; // meteen tonen, de volgende ronde bevestigt het
     teken();
     try {
-      const antwoord = await fetch(`/api/apparaat/${encodeURIComponent(a.id)}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ aan }),
-      });
-      if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+      await post(`/api/apparaat/${encodeURIComponent(a.id)}`, { aan });
     } catch (fout) {
       console.error('Bedienen mislukt', fout);
+      meldFout(`${a.naam} reageert niet`);
       if (a.bediening === 'schakel') a.aan = !aan;
     }
     staat.bezig.delete(a.id);
+    teken();
     setTimeout(() => {
       laad();
       opVerandering();
     }, 600);
+  }
+
+  /** Zet de naam om in een tekstvak. Enter bewaart, Escape laat het zoals het was, leeg zet de naam uit Home Assistant terug. */
+  function bewerkNaam(a: Apparaat, plek: HTMLElement) {
+    staat.bewerkt = a.id;
+    const veld = maak('input', 'inst-veld naam-veld');
+    veld.value = a.naam;
+    veld.maxLength = 60;
+    veld.setAttribute('aria-label', `Nieuwe naam voor ${a.naam}, leeg laten voor de naam uit Home Assistant`);
+    let klaar = false;
+    const sluit = async (bewaren: boolean) => {
+      if (klaar) return;
+      klaar = true;
+      staat.bewerkt = null;
+      if (bewaren && veld.value.trim() !== a.naam) await lijsten.hernoem(a.id, veld.value.trim());
+      laad();
+    };
+    veld.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sluit(true);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        sluit(false);
+      }
+    });
+    veld.addEventListener('blur', () => sluit(true));
+    plek.replaceChildren(veld);
+    veld.focus();
+    veld.select();
   }
 
   function rij(a: Apparaat) {
@@ -99,18 +167,27 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     const info = maak('div', 'lamp-info');
     const namen = maak('span');
     namen.append(a.naam, ...(a.tekst ? [maak('small', undefined, a.tekst)] : []));
-    info.append(namen);
+    info.append(icoon(a.soort), namen);
     r.append(info);
+    const knoppen = maak('div', 'rij-knoppen');
+    const potlood = maak('button', 'icoon-knop');
+    potlood.type = 'button';
+    potlood.innerHTML = POTLOOD;
+    potlood.setAttribute('aria-label', `${a.naam} een andere naam geven`);
+    potlood.title = 'Andere naam geven';
+    potlood.addEventListener('click', () => bewerkNaam(a, namen));
+    knoppen.append(potlood);
+    r.append(knoppen);
     if (a.bediening) {
-      // Ster: op de kaart Favorieten. Pijl: als knop onderin.
-      for (const [lijst, icoon, label] of [
+      // Ster: op de kaart Favorieten en in het dock. Punaise: vast als knop in het dock onderin.
+      for (const [lijst, beeld, label] of [
         ['favorieten', STER, 'favorieten'],
-        ['snelkoppelingen', ONDERIN, 'de knoppen onderin'],
+        ['snelkoppelingen', PUNAISE, 'de knoppen onderin'],
       ] as const) {
         const aan = lijsten.heeft(lijst, a.id);
         const k = maak('button', 'icoon-knop' + (aan ? ' aan' : ''));
         k.type = 'button';
-        k.innerHTML = icoon;
+        k.innerHTML = beeld;
         k.setAttribute('aria-pressed', String(aan));
         k.setAttribute('aria-label', `${a.naam} ${aan ? 'weghalen uit' : 'toevoegen aan'} ${label}`);
         k.title = aan ? `Weghalen uit ${label}` : `Toevoegen aan ${label}`;
@@ -118,15 +195,17 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
           await lijsten.wissel(lijst, a.id);
           teken();
         });
-        r.append(k);
+        knoppen.append(k);
       }
     }
     if (a.bediening === 'schakel') {
-      const s = maak('button', 'schakelaar');
+      // Alleen een lamp krijgt een warme schakelaar; de rest ijsblauw.
+      const s = maak('button', 'schakelaar' + (a.soort === 'light' ? ' warm' : ''));
       s.type = 'button';
       s.setAttribute('role', 'switch');
       s.setAttribute('aria-checked', String(!!a.aan));
       s.setAttribute('aria-label', `${a.naam} ${a.aan ? 'uitzetten' : 'aanzetten'}`);
+      s.setAttribute('aria-busy', String(staat.bezig.has(a.id)));
       s.disabled = !a.bereikbaar || staat.bezig.has(a.id);
       s.addEventListener('click', () => bedien(a, !a.aan));
       r.append(s);
@@ -152,10 +231,13 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   function teken() {
     filters.querySelectorAll<HTMLButtonElement>('button').forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.filter === staat.filter)));
     if (!staat.data) {
-      lijst.replaceChildren(maak('p', 'muted', staat.fout ? 'Home Assistant is niet bereikbaar.' : 'Laden…'));
+      lijst.replaceChildren(...(staat.fout ? [maak('p', 'muted', 'Home Assistant is niet bereikbaar.')] : [maak('div', 'gl laden-kaart'), maak('div', 'gl laden-kaart'), maak('div', 'gl laden-kaart')]));
       return;
     }
-    const groepen = [...staat.data.ruimtes, ...(staat.data.overig.length ? [{ id: '__overig', naam: 'Zonder ruimte', verdieping: null, apparaten: staat.data.overig }] : [])];
+    const overig = staat.data.overig;
+    const losse = GROEPEN.map(([naam, soorten]) => ({ id: `__${naam}`, naam, verdieping: 'Zonder ruimte', apparaten: overig.filter((a) => soorten.includes(a.soort)) }));
+    const rest = overig.filter((a) => !GROEPEN.some(([, soorten]) => soorten.includes(a.soort)));
+    const groepen = [...staat.data.ruimtes, ...losse, ...(rest.length ? [{ id: '__rest', naam: 'Overig', verdieping: 'Zonder ruimte', apparaten: rest }] : [])];
     const kaarten = groepen
       .map((g) => ({ ...g, apparaten: g.apparaten.filter((a) => past(a, g.naam)) }))
       .filter((g) => g.apparaten.length)
@@ -163,8 +245,10 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
         const kaart = maak('section', 'gl ruimte-kaart');
         const binnen = maak('div', 'gl-in paneel');
         const kop = maak('div', 'kop');
-        kop.append(maak('h2', 'kamer-naam', g.naam), maak('span', 'lbl', (g.verdieping ?? '').toUpperCase()));
-        binnen.append(kop, ...g.apparaten.map(rij));
+        const lijst = maak('div', 'lijst');
+        lijst.append(...g.apparaten.map(rij));
+        kop.append(maak('h2', 'kamer-naam', g.naam), maak('span', 'lbl', g.verdieping ?? ''));
+        binnen.append(kop, lijst);
         kaart.append(binnen);
         return kaart;
       });
@@ -180,8 +264,8 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     } catch {
       staat.fout = true;
     }
-    // Niet opnieuw tekenen terwijl iemand een schakelaar indrukt.
-    if (!staat.bezig.size && !schuiftNu()) teken();
+    // Niet opnieuw tekenen terwijl iemand een schakelaar indrukt of een naam aan het typen is.
+    if (!staat.bezig.size && !schuiftNu() && !staat.bewerkt) teken();
   }
 
   teken();
@@ -223,7 +307,8 @@ export function maakCameras() {
             beeld.alt = `Camerabeeld ${c.naam}`;
             beeld.addEventListener('error', () => beeld.classList.add('leeg'));
             beeld.addEventListener('load', () => beeld.classList.remove('leeg'));
-            tegel.append(beeld, maak('span', 'lbl camera-tegel-naam', c.naam.toUpperCase()));
+            // Zonder beeld een rustige tekst in plaats van een leeg vlak.
+            tegel.append(beeld, maak('span', 'camera-tegel-leeg muted klein', 'Geen beeld'), maak('span', 'lbl camera-tegel-naam', c.naam));
             tegel.addEventListener('click', () => {
               open = c;
               grootNaam.textContent = c.naam;
@@ -273,14 +358,10 @@ export function maakCameras() {
   async function zetOptie(c: Camera, o: CameraOptie, waarde: boolean | string | number | null) {
     optiesBezig = true;
     try {
-      const antwoord = await fetch(`/api/camera/${encodeURIComponent(c.id)}/opties/${encodeURIComponent(o.id)}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ waarde }),
-      });
-      if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+      await post(`/api/camera/${encodeURIComponent(c.id)}/opties/${encodeURIComponent(o.id)}`, { waarde });
     } catch (fout) {
       console.error('Camera-instelling mislukt', fout);
+      meldFout(`${o.naam} lukte niet`);
     }
     optiesBezig = false;
     setTimeout(() => open?.id === c.id && laadOpties(c), 700);

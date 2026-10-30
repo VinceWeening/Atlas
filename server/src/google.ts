@@ -3,7 +3,8 @@
 import { randomBytes } from 'node:crypto';
 import { bewaar, lees } from './opslag.js';
 
-export type Afspraak = { tijd: string; titel: string; detail: string; kleur: string | null };
+/** Een afspraak van vandaag; begin en plek zijn er voor de vertrekhulp. */
+export type Afspraak = { tijd: string; titel: string; detail: string; kleur: string | null; begin?: string; plek?: string };
 export type Mail = { van: string; onderwerp: string; stukje: string; tijd: string | null; link: string };
 export type Agenda = { id: string; naam: string; kleur: string | null; aan: boolean };
 
@@ -140,7 +141,7 @@ export class Google {
       const nu = new Date();
       const van = new Date(nu.getTime() - 24 * 3600_000).toISOString();
       const tot = new Date(nu.getTime() + 48 * 3600_000).toISOString();
-      type Item = { summary?: string; status?: string; start: { date?: string; dateTime?: string }; end: { date?: string; dateTime?: string } };
+      type Item = { summary?: string; status?: string; location?: string; start: { date?: string; dateTime?: string }; end: { date?: string; dateTime?: string } };
       const perAgenda = await Promise.all(
         agendas.map(async (a) => {
           const p = new URLSearchParams({ timeMin: van, timeMax: tot, singleEvents: 'true', orderBy: 'startTime', maxResults: '50' });
@@ -165,6 +166,8 @@ export class Google {
           titel: i.summary ?? '(geen titel)',
           detail: i.end.dateTime ? `tot ${uur(i.end.dateTime)}` : i.agenda.naam,
           kleur: i.agenda.kleur,
+          ...(i.start.dateTime ? { begin: new Date(i.start.dateTime).toISOString() } : {}),
+          ...(i.location ? { plek: i.location } : {}),
         }));
       const eerste = alle.find((i) => opDag(i, morgen));
       const morgenTekst = eerste ? `${eerste.start.dateTime ? uur(eerste.start.dateTime) : 'Hele dag'} · ${eerste.summary ?? '(geen titel)'}` : '';
