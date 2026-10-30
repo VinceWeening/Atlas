@@ -10,6 +10,10 @@ import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
 import { Apps } from './apps.js';
 import { voerUit } from './opdracht.js';
+import { Aanwezig } from './aanwezig.js';
+import { regen, volgendeVertrek } from './vertrek.js';
+import { middernacht } from './energie.js';
+import { naarTekst, spraakAan } from './spraak.js';
 import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
@@ -53,6 +57,10 @@ const entiteit = (soort: string, waarde: string) => (new RegExp(`^${soort}\\.[a-
 const meldingen = Meldingen.uitOmgeving(huis, app.log);
 
 const apps = new Apps(meldingen, app.log);
+
+const aanwezig = new Aanwezig(huis instanceof HomeAssistant ? huis : null, app.log);
+aanwezig.start();
+meldingen.isWeg = () => aanwezig.weg;
 
 const google = Google.uitOmgeving();
 app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');
@@ -207,6 +215,44 @@ app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id
 app.get('/api/energie', async (_request, reply) => {
   try {
     return await huis.energie();
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+// Vertrekhulp: wanneer weg voor de volgende afspraak, en of het regent.
+app.get('/api/vertrek', async () => {
+  let afspraken = voorbeeld.agenda.map((a) => {
+    // In het voorbeeld: de afspraken staan vandaag op hun tijd, en Sporten is een plek.
+    const [u, m] = a.tijd.split(':').map(Number);
+    const begin = new Date(middernacht().getTime() + (u * 60 + m) * 60_000);
+    return { ...a, kleur: null, begin: begin.toISOString(), plek: a.titel === 'Sporten' ? 'Sportschool Heiloo' : undefined };
+  });
+  if (google?.gekoppeld) afspraken = (await google.afspraken().catch(() => ({ vandaag: [] }))).vandaag as typeof afspraken;
+  return { vertrek: volgendeVertrek(afspraken), regen: await regen() };
+});
+
+// Opnames voor de eigen Whisper-server komen binnen als ruwe audio, hooguit 5 MB (ruim een minuut).
+app.addContentTypeParser(/^audio\//, { parseAs: 'buffer', bodyLimit: 5 * 1024 * 1024 }, (_request, body, klaar) => klaar(null, body));
+app.get('/api/spraak', async () => ({ aan: spraakAan() }));
+app.post('/api/spraak', async (request, reply) => {
+  if (!spraakAan()) return reply.code(404).send({ fout: 'Spraak op de server staat niet aan' });
+  const type = String(request.headers['content-type'] ?? '');
+  if (!Buffer.isBuffer(request.body) || !type.startsWith('audio/')) return reply.code(400).send({ fout: 'Geen opname' });
+  try {
+    return { tekst: await naarTekst(request.body, type.split(';')[0]) };
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'De spraakserver is niet bereikbaar' });
+  }
+});
+
+app.get('/api/aanwezig', async () => aanwezig.status());
+
+app.get('/api/afval', async (_request, reply) => {
+  try {
+    return { lijst: await huis.afval() };
   } catch (fout) {
     app.log.error(fout);
     return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });

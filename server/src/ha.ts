@@ -484,10 +484,75 @@ export class HomeAssistant {
       .map((id) => ({ id, naam: id.slice('mobile_app_'.length).replace(/_/g, ' ') }));
   }
 
-  async melding(toestel: string, titel: string, tekst: string) {
+  /** Een melding op de telefoon; met acties krijgt hij knoppen, die Atlas via de websocket terughoort. */
+  async melding(toestel: string, titel: string, tekst: string, acties: { action: string; title: string }[] = []) {
     await this.vraag(`/api/services/notify/${toestel}`, {
       method: 'POST',
-      body: JSON.stringify({ title: titel, message: tekst, data: { group: 'atlas', tag: `atlas-${titel}` } }),
+      body: JSON.stringify({ title: titel, message: tekst, data: { group: 'atlas', tag: `atlas-${titel}`, ...(acties.length ? { actions: acties } : {}) } }),
     });
   }
+
+  /** De personen in Home Assistant en of ze thuis zijn (via de app op hun telefoon). */
+  async personen(): Promise<Persoon[]> {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return toestanden
+      .filter((t) => t.entity_id.startsWith('person.') && t.state !== 'unknown' && t.state !== 'unavailable')
+      .map((t) => ({ id: t.entity_id, naam: vriendelijk(t), thuis: t.state === 'home' }));
+  }
+
+  /**
+   * Ophaaldagen van het afval. Werkt met de integraties Afvalwijzer (ook HVC in Heiloo) en Waste Collection Schedule:
+   * Atlas zoekt sensoren met afval in de naam en een datum als stand.
+   */
+  async afval(): Promise<Afval[]> {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return afvalUit(toestanden);
+  }
+
+  /** Lampen die nu aan zijn, voor "Alles uit?". */
+  async lampenAan() {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    return toestanden.filter((t) => t.entity_id.startsWith('light.') && t.state === 'on').map((t) => t.entity_id);
+  }
+
+  /** Adres en toegangscode, voor de websocket van Home Assistant. */
+  get verbinding() {
+    return this.instellingen;
+  }
+}
+
+export type Persoon = { id: string; naam: string; thuis: boolean };
+export type Afval = { id: string; naam: string; datum: string };
+
+const AFVAL = /afval|waste|gft|pmd|restafval|rest_afval|papier|plastic|kca|textiel|kerstbomen|groente|grofvuil|container/i;
+// Hulpsensoren van Afvalwijzer die zelf geen soort afval zijn.
+const AFVAL_HULP = /today|tomorrow|vandaag|morgen|first_next|eerstvolgende|day_after|overmorgen|next_type|next_date|last_update/i;
+
+/** Een datum als 2026-10-31, 31-10-2026 of 31/10/2026, of een aantal dagen vanaf vandaag. */
+function afvalDatum(t: Toestand, vandaag: string) {
+  const s = t.state.trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{2})[-/.](\d{2})[-/.](\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const dagen = Number(t.attributes.daysTo ?? t.attributes.days_until_collection_date ?? t.attributes.days);
+  if (Number.isInteger(dagen) && dagen >= 0) {
+    const d = new Date(`${vandaag}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dagen);
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+export function afvalUit(toestanden: Toestand[], nu = new Date()): Afval[] {
+  const vandaag = nu.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  const lijst: Afval[] = [];
+  for (const t of toestanden) {
+    if (!t.entity_id.startsWith('sensor.') || !AFVAL.test(`${t.entity_id} ${t.attributes.friendly_name ?? ''}`) || AFVAL_HULP.test(t.entity_id)) continue;
+    const datum = afvalDatum(t, vandaag);
+    if (!datum || datum < vandaag) continue;
+    const naam = vriendelijk(t).replace(/^(afvalwijzer|waste collection|afval)\s*/i, '').trim() || vriendelijk(t);
+    lijst.push({ id: t.entity_id, naam: naam.length <= 4 ? naam.toUpperCase() : naam.replace(/^\w/, (l) => l.toUpperCase()), datum });
+  }
+  return lijst.sort((a, b) => a.datum.localeCompare(b.datum) || a.naam.localeCompare(b.naam, 'nl'));
 }

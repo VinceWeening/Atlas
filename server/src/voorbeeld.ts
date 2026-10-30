@@ -66,6 +66,15 @@ export class VoorbeeldHuis {
     };
   }
 
+  /** In het voorbeeldhuis: GFT morgen en papier volgende week, zodat je ziet hoe het eruitziet. */
+  async afval() {
+    const dag = (n: number) => new Date(Date.now() + n * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+    return [
+      { id: 'sensor.afvalwijzer_gft', naam: 'GFT', datum: dag(1) },
+      { id: 'sensor.afvalwijzer_papier', naam: 'Papier', datum: dag(6) },
+    ];
+  }
+
   async toestellen() {
     return [];
   }

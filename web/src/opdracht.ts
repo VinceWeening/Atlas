@@ -25,7 +25,9 @@ type Herkenning = {
 };
 const HerkenningKlasse = ((window as unknown as Record<string, unknown>).SpeechRecognition ??
   (window as unknown as Record<string, unknown>).webkitSpeechRecognition) as (new () => Herkenning) | undefined;
-export const kanSpraak = !!HerkenningKlasse;
+const kanOpnemen = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+/** Of spreken kan: met de spraakherkenning van de browser, of met een opname voor de eigen Whisper-server. */
+export const kanSpraak = !!HerkenningKlasse || kanOpnemen;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -40,7 +42,17 @@ export function startOpdracht(opties: Opties) {
   let luistert: Herkenning | null = null;
   let bezig = false;
 
-  mic.hidden = !kanSpraak;
+  // Staat er een eigen Whisper-server klaar, dan gaat spraak daarheen: dat blijft thuis en werkt ook in de Windows-app.
+  let serverSpraak = false;
+  let opname: { stop: () => void } | null = null;
+  mic.hidden = !HerkenningKlasse;
+  fetch('/api/spraak')
+    .then((a) => (a.ok ? a.json() : { aan: false }))
+    .then((d: { aan: boolean }) => {
+      serverSpraak = d.aan && kanOpnemen;
+      mic.hidden = !HerkenningKlasse && !serverSpraak;
+    })
+    .catch(() => {});
 
   const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' = 'gewoon') => {
     antwoord.textContent = tekst;
@@ -77,6 +89,7 @@ export function startOpdracht(opties: Opties) {
 
   function sluit() {
     luistert?.stop();
+    opname?.stop();
     if (venster.open) venster.close();
   }
 
@@ -120,7 +133,85 @@ export function startOpdracht(opties: Opties) {
     }
   }
 
+  function luisterAan(aan: boolean) {
+    mic.setAttribute('aria-pressed', String(aan));
+    venster.classList.toggle('luistert', aan);
+  }
+
+  /** Opnemen tot je even stil bent (of hooguit acht seconden), dan naar de Whisper-server. */
+  async function neemOp() {
+    if (opname) {
+      opname.stop();
+      return;
+    }
+    let stroom: MediaStream;
+    try {
+      stroom = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      zeg('Atlas mag de microfoon niet gebruiken.', 'fout');
+      return;
+    }
+    const rec = new MediaRecorder(stroom);
+    const delen: Blob[] = [];
+    rec.ondataavailable = (e) => delen.push(e.data);
+    const ctx = new AudioContext();
+    const meter = ctx.createAnalyser();
+    meter.fftSize = 512;
+    ctx.createMediaStreamSource(stroom).connect(meter);
+    const golf = new Uint8Array(meter.fftSize);
+    const begin = performance.now();
+    let gesproken = false;
+    let stilSinds = begin;
+    const meet = () => {
+      if (rec.state !== 'recording') return;
+      meter.getByteTimeDomainData(golf);
+      let som = 0;
+      for (const w of golf) som += ((w - 128) / 128) ** 2;
+      const nu = performance.now();
+      if (Math.sqrt(som / golf.length) > 0.04) {
+        gesproken = true;
+        stilSinds = nu;
+      }
+      if ((gesproken && nu - stilSinds > 1200) || nu - begin > 8000 || (!gesproken && nu - begin > 5000)) rec.stop();
+      else requestAnimationFrame(meet);
+    };
+    rec.onstop = async () => {
+      stroom.getTracks().forEach((t) => t.stop());
+      void ctx.close();
+      opname = null;
+      luisterAan(false);
+      if (!gesproken) {
+        zeg('Ik hoorde niets.', 'fout');
+        return;
+      }
+      zeg('Even luisteren…', 'luistert');
+      const blob = new Blob(delen, { type: rec.mimeType || 'audio/webm' });
+      try {
+        const a = await fetch('/api/spraak', { method: 'POST', headers: { 'content-type': blob.type.split(';')[0] }, body: blob });
+        const d = (await a.json()) as { tekst?: string; fout?: string };
+        if (!a.ok) throw new Error(d.fout ?? 'Spraak lukte niet');
+        if (!d.tekst) {
+          zeg('Ik verstond het niet.', 'fout');
+          return;
+        }
+        veld.value = d.tekst;
+        void verstuur(d.tekst, true);
+      } catch (fout) {
+        zeg(fout instanceof Error ? fout.message : 'Spraak lukte niet', 'fout');
+      }
+    };
+    rec.start();
+    opname = { stop: () => rec.state === 'recording' && rec.stop() };
+    luisterAan(true);
+    zeg('Ik luister…', 'luistert');
+    requestAnimationFrame(meet);
+  }
+
   function luister() {
+    if (serverSpraak) {
+      void neemOp();
+      return;
+    }
     if (!HerkenningKlasse) {
       zeg('Spraak werkt in deze app nog niet. Typ je opdracht.', 'gewoon');
       return;
@@ -144,13 +235,11 @@ export function startOpdracht(opties: Opties) {
     };
     r.onend = () => {
       luistert = null;
-      mic.setAttribute('aria-pressed', 'false');
-      venster.classList.remove('luistert');
+      luisterAan(false);
       if (klaar) void verstuur(klaar, true);
     };
     luistert = r;
-    mic.setAttribute('aria-pressed', 'true');
-    venster.classList.add('luistert');
+    luisterAan(true);
     zeg('Ik luister…', 'luistert');
     r.start();
   }
@@ -176,7 +265,10 @@ export function startOpdracht(opties: Opties) {
   venster.addEventListener('click', (e) => {
     if (e.target === venster) sluit();
   });
-  venster.addEventListener('close', () => luistert?.stop());
+  venster.addEventListener('close', () => {
+    luistert?.stop();
+    opname?.stop();
+  });
 
   document.addEventListener('keydown', (e) => {
     const doel = e.target as HTMLElement;

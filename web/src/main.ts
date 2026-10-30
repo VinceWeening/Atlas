@@ -65,7 +65,14 @@ const staat = {
   huisVoor: false,
   /** Lampen en apparaten waarvan een opdracht onderweg is; hun schakelaar staat dan even op wachten. */
   bezig: new Set<string>(),
+  vertrek: null as Vertrek | null,
+  regen: null as Regen | null,
+  afval: [] as Afval[],
 };
+
+type Vertrek = { titel: string; plek: string | null; begin: string; om: string; reistijd: number };
+type Regen = { tekst: string; nu: boolean; komt: boolean };
+type Afval = { id: string; naam: string; datum: string };
 
 function tekst(el: HTMLElement, waarde: string) {
   el.textContent = waarde;
@@ -610,7 +617,11 @@ const middag = (iso: string) => new Date(`${iso}T12:00:00`).getTime();
 const korteDatum = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 function tekenBelangrijk() {
   const vandaag = middag(new Date().toLocaleDateString('sv-SE'));
-  const lijst = (staat.inst?.belangrijk ?? []).filter((d) => middag(d.datum) >= vandaag).slice(0, 4);
+  // Ophaaldagen van vandaag tot overmorgen staan tussen de data; verder vooruit is nog niet nodig.
+  const afval = staat.inst?.blokken.afval === false ? [] : staat.afval.filter((a) => middag(a.datum) - vandaag <= 2 * dag).map((a) => ({ id: a.id, titel: a.naam, datum: a.datum, van: null, afval: true }));
+  const lijst = [...(staat.inst?.belangrijk ?? []).filter((d) => middag(d.datum) >= vandaag), ...afval]
+    .sort((a, b) => a.datum.localeCompare(b.datum))
+    .slice(0, 5);
   // Zonder data verdwijnt het blok; data toevoegen gaat via het tandwiel.
   document.querySelector('.stage [data-blok="belangrijk"]')!.classList.toggle('leeg', lijst.length === 0);
   if (lijst.length === 0) {
@@ -638,9 +649,10 @@ function tekenBelangrijk() {
         detail = `t/m ${datum} · nog ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`;
         voortgang = Math.min(1, (vandaag - begin) / Math.max(dag, eind - begin));
       } else {
-        if (dagen <= 7) rij.classList.add('dringend');
-        teller = dagen === 0 ? 'vandaag' : dagen === 1 ? 'morgen' : `nog ${dagen} dagen`;
-        detail = datum;
+        const isAfval = 'afval' in d;
+        if (dagen <= 7 && !isAfval) rij.classList.add('dringend');
+        teller = dagen === 0 ? 'vandaag' : dagen === 1 ? 'morgen' : isAfval ? new Intl.DateTimeFormat('nl-NL', { weekday: 'long' }).format(eind) : `nog ${dagen} dagen`;
+        detail = isAfval ? `Afval · ${datum}` : datum;
       }
       const kop = maak('div', 'kop');
       kop.append(maak('strong', undefined, d.titel), maak('span', 'mono', teller));
@@ -933,8 +945,52 @@ function tekenStand() {
     const lampen = staat.huis ? [...staat.huis.kamers.flatMap((k) => k.lampen), ...staat.huis.losseLampen] : [];
     const aan = lampen.filter((l) => l.aan).length;
     zin = `${o?.morgen ? `Morgen ${o.morgen}.` : 'Morgen staat er niets gepland.'} ${aan === 0 ? 'Alle lampen zijn uit.' : `${aan} ${aan === 1 ? 'lamp is' : 'lampen zijn'} nog aan.`}`;
+    const morgen = new Date(Date.now() + dag).toLocaleDateString('sv-SE');
+    const buiten = staat.inst?.blokken.afval === false ? [] : staat.afval.filter((a) => a.datum === morgen).map((a) => a.naam);
+    if (buiten.length) zin += ` Morgen ${buiten.join(' en ')} aan de straat.`;
   }
   tekst($('dagstart-tekst'), zin);
+  tekenVertrek();
+}
+
+// Vertrekhulp: in Vandaag (en 's ochtends in de begroeting) hoe laat je weg moet en of het dan regent.
+function vertrekTekst() {
+  if (staat.inst?.blokken.vertrek === false) return null;
+  const v = staat.vertrek;
+  const r = staat.regen;
+  const nu = Date.now();
+  // Alleen als het vertrek binnen vier uur is; anders is het nog niet relevant.
+  const binnenkort = v && new Date(v.om).getTime() - nu < 4 * 3_600_000;
+  if (binnenkort) return { tekst: `Vertrek ${uur(v.om)} · ${v.plek ?? v.titel}${r ? ` · ${r.tekst.toLowerCase()}` : ''}`, nat: !!r?.komt };
+  if (r?.komt) return { tekst: r.tekst, nat: true };
+  return null;
+}
+function tekenVertrek() {
+  const t = vertrekTekst();
+  for (const id of ['vertrek', 'dagstart-vertrek']) {
+    const el = $(id);
+    el.hidden = !t || (id === 'dagstart-vertrek' && huidigeStand() !== 'ochtend');
+    el.classList.toggle('nat', !!t?.nat);
+    if (t) tekst(el, t.tekst);
+  }
+}
+async function laadVertrek() {
+  try {
+    const [v, a] = await Promise.all([
+      fetch('/api/vertrek').then((x) => (x.ok ? x.json() : null)),
+      fetch('/api/afval').then((x) => (x.ok ? x.json() : null)),
+    ]);
+    if (v) {
+      staat.vertrek = v.vertrek;
+      staat.regen = v.regen;
+    }
+    if (a) staat.afval = a.lijst;
+  } catch {
+    // Laatste waarden blijven staan.
+  }
+  tekenVertrek();
+  tekenBelangrijk();
+  if (staat.inst) tekenStand();
 }
 
 // Tijdlijn: wat de camera's vandaag zagen, ook tijdens de stille uren.
@@ -1230,6 +1286,8 @@ setInterval(tikKlok, 1000);
 setInterval(tekenSfeer, 60_000);
 laadTijdlijn();
 setInterval(() => document.visibilityState === 'visible' && laadTijdlijn(), 60_000);
+laadVertrek();
+setInterval(() => document.visibilityState === 'visible' && laadVertrek(), 120_000);
 laadEnergie();
 setInterval(() => document.visibilityState === 'visible' && staat.inst?.blokken.energie !== false && laadEnergie(), 30_000);
 // Als app op de telefoon: de schil bewaren voor snel openen. Werkt alleen via https (Tailscale) of localhost.

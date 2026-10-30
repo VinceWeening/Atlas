@@ -833,3 +833,13 @@ dialog[open]::backdrop { animation: achter 420ms ease; }
 @media (prefers-reduced-motion: reduce) {
   .opdracht-mic[aria-pressed="true"], .opdracht[aria-busy="true"] .opdracht-teken { animation: none; }
 }
+
+/* Vertrekhulp: één regel boven de agenda en in de ochtendbegroeting. Regen krijgt een ijsblauwe stip, verder geen kleur. */
+.vertrek { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 14px; border-radius: var(--r-rij); background: var(--vlak-1); font-size: var(--t-klein); color: var(--tekst); font-variant-numeric: tabular-nums; }
+.vertrek::before { content: ''; flex: none; width: 14px; height: 14px; background: currentColor; opacity: 0.8;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center / contain no-repeat; }
+.vertrek.nat::after { content: ''; flex: none; width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--ijs); box-shadow: 0 0 0 4px rgba(168,216,255,0.15); }
+.dagstart .vertrek { margin: 14px 0 0; }
+.getal-veld { flex: none; width: 84px; }
+.inst-tekstvak { min-height: 84px; padding: 10px 14px; resize: vertical; line-height: 1.5; }

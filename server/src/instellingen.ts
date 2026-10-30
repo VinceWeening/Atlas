@@ -1,7 +1,7 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn', 'energie', 'opdracht'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn', 'energie', 'opdracht', 'afval', 'vertrek'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
 // De spraakbol doet pas iets in fase 3, dus die staat tot dan uit.
 const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads', 'spraak'];
@@ -44,6 +44,16 @@ export type Instellingen = {
   namen: Record<string, string>;
   /** Ochtendstand (agenda groot) en avondstand (rust) op Thuis en Overzicht. */
   standen: { ochtend: Periode; avond: Periode };
+  /** Thuis en weg, via de personen in Home Assistant. Standaard uit. */
+  weg: {
+    aan: boolean;
+    /** Een melding "Alles uit?" als iedereen weg is en er nog lampen branden. */
+    allesUit: boolean;
+    /** Camerameldingen op de telefoon alleen als iedereen weg is. */
+    alleenWeg: boolean;
+  };
+  /** Vertrekhulp: reistijd naar plekken in je agenda. */
+  vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
 };
 
 const standaard: Instellingen = {
@@ -65,6 +75,8 @@ const standaard: Instellingen = {
   snelkoppelingen: [],
   namen: {},
   standen: { ochtend: { aan: true, van: '06:00', tot: '10:00' }, avond: { aan: true, van: '21:00', tot: '01:00' } },
+  weg: { aan: false, allesUit: true, alleenWeg: false },
+  vertrek: { reistijd: 20, plekken: [] },
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
@@ -75,6 +87,8 @@ huidig.favorieten ??= [];
 huidig.snelkoppelingen ??= [];
 huidig.namen ??= {};
 huidig.standen = { ...standaard.standen, ...huidig.standen };
+huidig.weg = { ...standaard.weg, ...huidig.weg };
+huidig.vertrek = { ...standaard.vertrek, ...huidig.vertrek };
 
 export const instellingen = () => huidig;
 
@@ -151,6 +165,34 @@ export function zetInstellingen(nieuw: unknown): string | null {
       if (st[stand] === undefined) continue;
       if (!isPeriode(st[stand])) return `Ongeldige ${stand}stand`;
       volgende.standen[stand] = { aan: st[stand]!.aan, van: st[stand]!.van, tot: st[stand]!.tot };
+    }
+  }
+  if (n.weg !== undefined) {
+    const w = n.weg as Partial<Instellingen['weg']> | null;
+    if (!w || typeof w !== 'object') return 'Ongeldige instelling thuis en weg';
+    for (const sleutel of ['aan', 'allesUit', 'alleenWeg'] as const) {
+      if (w[sleutel] === undefined) continue;
+      if (typeof w[sleutel] !== 'boolean') return 'Ongeldige instelling thuis en weg';
+      volgende.weg[sleutel] = w[sleutel]!;
+    }
+  }
+  if (n.vertrek !== undefined) {
+    const v = n.vertrek as Partial<Instellingen['vertrek']> | null;
+    if (!v || typeof v !== 'object') return 'Ongeldige vertrekhulp';
+    const minuten = (m: unknown) => Number.isInteger(m) && (m as number) >= 0 && (m as number) <= 300;
+    if (v.reistijd !== undefined) {
+      if (!minuten(v.reistijd)) return 'Reistijd is 0 tot 300 minuten';
+      volgende.vertrek.reistijd = v.reistijd;
+    }
+    if (v.plekken !== undefined) {
+      if (!Array.isArray(v.plekken) || v.plekken.length > 30) return 'Ongeldige plekken';
+      const lijst: { naam: string; minuten: number }[] = [];
+      for (const p of v.plekken as Partial<{ naam: string; minuten: number }>[]) {
+        const naam = typeof p?.naam === 'string' ? p.naam.trim().slice(0, 60) : '';
+        if (!naam || !minuten(p.minuten)) return 'Elke plek heeft een naam en 0 tot 300 minuten nodig';
+        lijst.push({ naam, minuten: p.minuten! });
+      }
+      volgende.vertrek.plekken = lijst;
     }
   }
   if (n.meldingen !== undefined) {

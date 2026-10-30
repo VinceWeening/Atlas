@@ -25,6 +25,8 @@ export type Instellingen = {
   snelkoppelingen: string[];
   namen: Record<string, string>;
   standen: { ochtend: Periode; avond: Periode };
+  weg: { aan: boolean; allesUit: boolean; alleenWeg: boolean };
+  vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -92,6 +94,8 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
       ['hud', 'Status bovenin', 'Temperatuur binnen, lampen aan en de voordeur'],
       ['tijdlijn', 'Vandaag gezien', 'Wie of wat de camera’s vandaag zagen, op Overzicht'],
       ['energie', 'Energie en klimaat', 'Stroom, gas, zon en de temperatuur per ruimte, op Overzicht'],
+      ['vertrek', 'Vertrekhulp', 'Hoe laat je weg moet voor je volgende afspraak, en of het regent'],
+      ['afval', 'Afvalkalender', 'Ophaaldagen bij Belangrijk, en ’s avonds wat er morgen buiten moet'],
     ],
   ],
   [
@@ -284,12 +288,82 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     rij.append(toevoegen, opslaan);
     data.append(regels, rij, melding);
 
+    // Vertrekhulp: een vaste reistijd, en per plek een eigen tijd. De plek wordt herkend in de titel of de locatie.
+    const vertrek = maak('section', 'inst-sectie');
+    vertrek.append(
+      maak('h3', 'lbl', 'VERTREKHULP'),
+      maak('p', 'muted klein', 'Atlas rekent terug vanaf je volgende afspraak met een locatie. Zet per plek een eigen reistijd, één per regel, zoals “Xafax = 25”. Die naam mag in de titel of de locatie van de afspraak staan.'),
+    );
+    const reistijdRij = maak('div', 'lamp');
+    const reistijd = maak('input', 'inst-veld getal-veld');
+    reistijd.type = 'number';
+    reistijd.min = '0';
+    reistijd.max = '300';
+    reistijd.value = String(inst.vertrek.reistijd);
+    reistijd.setAttribute('aria-label', 'Standaard reistijd in minuten');
+    const tijdVak = maak('div', 'inst-tijden');
+    tijdVak.append(reistijd, maak('span', 'muted klein', 'min'));
+    reistijdRij.append(maak('div', 'lamp-info', 'Standaard reistijd'), tijdVak);
+    const plekken = maak('textarea', 'inst-veld inst-tekstvak');
+    plekken.rows = 3;
+    plekken.placeholder = 'Xafax = 25\nSportschool = 10';
+    plekken.value = inst.vertrek.plekken.map((p) => `${p.naam} = ${p.minuten}`).join('\n');
+    plekken.setAttribute('aria-label', 'Plekken met reistijd');
+    const vertrekOpslaan = knop('Opslaan');
+    const vertrekMelding = maak('p', 'klein muted');
+    vertrekMelding.setAttribute('role', 'status');
+    vertrekOpslaan.addEventListener('click', async () => {
+      const lijst = plekken.value
+        .split('\n')
+        .map((r) => r.match(/^(.+?)\s*[=:]\s*(\d+)\s*(min.*)?$/))
+        .filter((m): m is RegExpMatchArray => !!m)
+        .map((m) => ({ naam: m[1].trim(), minuten: Number(m[2]) }));
+      try {
+        inst = await bewaar({ vertrek: { reistijd: Number(reistijd.value) || 0, plekken: lijst } });
+        plekken.value = inst.vertrek.plekken.map((p) => `${p.naam} = ${p.minuten}`).join('\n');
+        vertrekMelding.textContent = 'Opgeslagen.';
+      } catch (fout) {
+        vertrekMelding.textContent = (fout as Error).message;
+      }
+    });
+    vertrek.append(reistijdRij, plekken, vertrekOpslaan, vertrekMelding);
+
     return {
       scherm: [blokken, standen, start],
-      data: [data],
-      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw))],
+      data: [data, vertrek],
+      meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw)), await tekenWeg(inst, (nieuw) => (inst = nieuw))],
       knoppen: [await tekenSnelkoppelingen(inst)],
     };
+  }
+
+  /** Thuis en weg: via de personen in Home Assistant. */
+  async function tekenWeg(inst: Instellingen, zet: (inst: Instellingen) => void) {
+    const sectie = maak('section', 'inst-sectie');
+    sectie.append(
+      maak('h3', 'lbl', 'THUIS EN WEG'),
+      maak('p', 'muted klein', 'Atlas weet of je thuis bent via de personen in Home Assistant (de app op je telefoon). De meldingen gaan naar de telefoon die hierboven gekozen is.'),
+    );
+    const status = maak('p', 'klein muted');
+    try {
+      const a = (await (await fetch('/api/aanwezig')).json()) as { personen: { naam: string; thuis: boolean }[] };
+      status.textContent = a.personen.length
+        ? `Gevonden: ${a.personen.map((p) => `${p.naam} (${p.thuis ? 'thuis' : 'weg'})`).join(', ')}`
+        : 'Nog geen personen gevonden in Home Assistant. Voeg je telefoon toe aan een persoon onder Instellingen › Personen.';
+    } catch {
+      status.textContent = '';
+    }
+    const lokaal = { ...inst.weg };
+    const bewaarW = async (deel: Partial<Instellingen['weg']>) => {
+      Object.assign(lokaal, deel);
+      zet(await bewaar({ weg: deel }));
+    };
+    sectie.append(
+      status,
+      schakelaarRij('Thuis en weg', lokaal.aan, (aan) => bewaarW({ aan }), 'Hoofdschakelaar voor de twee hieronder'),
+      schakelaarRij('“Alles uit?” als je weggaat', lokaal.allesUit, (aan) => bewaarW({ allesUit: aan }), 'Eén melding met een knop, alleen als er nog lampen branden'),
+      schakelaarRij('Camera’s alleen als je weg bent', lokaal.alleenWeg, (aan) => bewaarW({ alleenWeg: aan }), 'Op de telefoon; de pc meldt altijd'),
+    );
+    return sectie;
   }
 
   /** De knoppen onderin: volgorde en weghalen. Toevoegen gaat met de punaise bij Apparaten. */

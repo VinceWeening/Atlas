@@ -67,6 +67,8 @@ export class Meldingen {
   /** Gebeurtenissen die nog wachten op een gezicht of een zone, met wanneer Atlas ze voor het eerst zag. */
   private wacht = new Map<string, { gezien: number; start: number }>();
   bereikbaar = false;
+  /** Of iedereen weg is (null als onbekend); gezet door Thuis en weg. */
+  isWeg: () => boolean | null = () => null;
 
   constructor(
     readonly frigate: Dienst,
@@ -285,6 +287,9 @@ export class Meldingen {
     if (this.lijst.length > 50) this.lijst.shift();
     if (stil) return null;
     if (!inst.telefoon || !inst.toestel) return test ? 'De telefoon staat uit in het tandwiel.' : null;
+    // "Alleen als ik weg ben": iemand is thuis, dus niet naar de telefoon. Is het onbekend, dan wel, voor de zekerheid.
+    const weg = instellingen().weg;
+    if (!test && weg.aan && weg.alleenWeg && this.isWeg() === false) return null;
     try {
       await this.telefoon.melding(inst.toestel, m.titel, m.tekst);
       return test ? 'Ook naar je telefoon gestuurd.' : null;
