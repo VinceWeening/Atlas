@@ -7,6 +7,17 @@ const model = process.env.WHISPER_MODEL?.trim() || 'Systran/faster-whisper-small
 
 export const spraakAan = () => !!adres;
 
+/** Of de Whisper-server antwoordt; voor het controlescherm. */
+export async function spraakBereikbaar() {
+  if (!adres) return null;
+  try {
+    const antwoord = await fetch(`${adres}/v1/models`, { signal: AbortSignal.timeout(4000) });
+    return antwoord.status < 500;
+  } catch {
+    return false;
+  }
+}
+
 export async function naarTekst(audio: Buffer, type: string) {
   if (!adres) throw new Error('Geen WHISPER_URL ingesteld');
   const vorm = new FormData();

@@ -36,6 +36,9 @@ services:
       # Leeg = de app gebruikt de spraakherkenning van de browser (werkt niet in de Windows-app).
       WHISPER_URL: ""
       WHISPER_MODEL: "Systran/faster-whisper-small"
+      # Optioneel: lokale AI (Ollama) die zinnen herschrijft die de opdrachtbalk niet kent, bijvoorbeeld http://host.docker.internal:11434.
+      OLLAMA_URL: ""
+      OLLAMA_MODEL: "qwen2.5:3b"
 
   # Optioneel: een eigen Whisper-server voor spraak. Haal de # weg om hem mee te installeren (ongeveer 1 GB geheugen).
   # whisper:

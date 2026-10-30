@@ -11,6 +11,8 @@ export type Antwoord = {
   gedaan: boolean;
   /** Een scherm om naartoe te gaan; dat doet de app zelf. */
   scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras';
+  /** Als de lokale AI de zin herschreef: wat Atlas ervan maakte. */
+  begrepen?: string;
 };
 
 export type Bron = {
@@ -20,6 +22,8 @@ export type Bron = {
   lamp(id: string, opdracht: { aan?: boolean; helderheid?: number }): Promise<void>;
   bedien(id: string, aan: boolean): Promise<void>;
   scene(id: string): Promise<void>;
+  /** Optioneel: lokale AI die een onbekende zin herschrijft naar een zin die Atlas kent. */
+  hulp?: (zin: string, namen: { ruimtes: string[]; apparaten: string[]; scenes: string[] }) => Promise<string | null>;
 };
 
 /** Kleine letters, zonder accenten en leestekens, zodat "Camera's" en "cameras" hetzelfde zijn. */
@@ -132,8 +136,15 @@ export async function voerUit(invoer: string, bron: Bron): Promise<Antwoord> {
   const apparaat = bedienbaar.map((a) => ({ a, score: past(a.naam, z) })).filter((x) => x.score).sort((a, b) => b.score - a.score)[0];
   const kamer = huis.kamers.map((k) => ({ k, score: past(k.naam, z) })).filter((x) => x.score && x.k.lampen.length).sort((a, b) => b.score - a.score)[0];
 
-  if (!apparaat && !kamer) return { tekst: `Dat snap ik nog niet. ${VOORBEELD}`, gedaan: false };
-  if (!aan && !uit) return { tekst: `${(apparaat && (!kamer || apparaat.score > kamer.score) ? apparaat.a.naam : kamer!.k.naam)}: aan of uit?`, gedaan: false };
+  // Lokale AI aan: laat het model een onduidelijke zin herschrijven, en probeer die één keer. Zelf bedient het model niets.
+  const metHulp = async (anders: Antwoord): Promise<Antwoord> => {
+    const nieuw = await bron.hulp?.(invoer, { ruimtes: huis.kamers.map((k) => k.naam), apparaten: bedienbaar.map((a) => a.naam), scenes: huis.scenes.map((s) => s.naam) });
+    if (!nieuw || gewoon(nieuw) === gewoon(invoer)) return anders;
+    const tweede = await voerUit(nieuw, { ...bron, hulp: undefined });
+    return tweede.tekst.startsWith('Dat snap ik nog niet') ? anders : { ...tweede, begrepen: nieuw };
+  };
+  if (!apparaat && !kamer) return metHulp({ tekst: `Dat snap ik nog niet. ${VOORBEELD}`, gedaan: false });
+  if (!aan && !uit) return metHulp({ tekst: `${(apparaat && (!kamer || apparaat.score > kamer.score) ? apparaat.a.naam : kamer!.k.naam)}: aan of uit?`, gedaan: false });
 
   if (apparaat && (!kamer || apparaat.score > kamer.score)) {
     const a: Apparaat = apparaat.a;

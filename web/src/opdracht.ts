@@ -2,7 +2,7 @@
 // venster, de microfoon en het antwoord. Spraak gebruikt de spraakherkenning van de browser als die er is (Chrome, Edge,
 // Safari op iPhone); anders typ je.
 
-type Antwoord = { tekst: string; gedaan: boolean; scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras' };
+type Antwoord = { tekst: string; gedaan: boolean; scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras'; begrepen?: string };
 type Opties = {
   /** Of de opdrachtbalk aan staat in het tandwiel. */
   aan: () => boolean;
@@ -117,7 +117,8 @@ export function startOpdracht(opties: Opties) {
       const a = await fetch('/api/opdracht', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tekst }) });
       const data = (await a.json()) as Antwoord & { fout?: string };
       if (!a.ok) throw new Error(data.fout ?? `Server gaf ${a.status}`);
-      zeg(data.tekst, data.gedaan ? 'gedaan' : 'gewoon');
+      // Herschreef de lokale AI de zin, dan zie je wat Atlas ervan maakte.
+      zeg(data.begrepen ? `${data.tekst} (begrepen als “${data.begrepen}”)` : data.tekst, data.gedaan ? 'gedaan' : 'gewoon');
       if (gesproken) spreek(data.tekst);
       if (data.gedaan) opties.ververs();
       veld.value = '';

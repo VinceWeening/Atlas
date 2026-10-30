@@ -843,3 +843,28 @@ dialog[open]::backdrop { animation: achter 420ms ease; }
 .dagstart .vertrek { margin: 14px 0 0; }
 .getal-veld { flex: none; width: 84px; }
 .inst-tekstvak { min-height: 84px; padding: 10px 14px; resize: vertical; line-height: 1.5; }
+
+/* Controlescherm in het tandwiel: per koppeling een stip en één regel. */
+.status-lijst { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.status-rij { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 14px; align-items: start; padding: 10px 0; }
+.status-rij + .status-rij { border-top: 1px solid var(--rand); }
+.status-stip { width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--vlak-3); }
+.status-rij[data-staat="goed"] .status-stip { background: var(--ijs); box-shadow: 0 0 0 4px rgba(168,216,255,0.15); }
+.status-rij[data-staat="let-op"] .status-stip { background: var(--warm); box-shadow: 0 0 0 4px rgba(255,201,138,0.18); }
+.status-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.status-tekst strong { font-weight: 500; font-size: var(--t-tekst); }
+.status-lijst .laden { list-style: none; }
+
+/* Draaibaar 3D-huis: het canvas vult het midden; de glow onder het huis valt weg omdat het model een eigen schaduw heeft. */
+.huis.vrij { perspective: none; }
+.huis.vrij::before { display: none; }
+.huis3d { position: absolute; inset: 100px 37% 120px 26%; }
+.huis3d canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.huis3d canvas:active { cursor: grabbing; }
+.huis3d-label {
+  position: absolute; left: 0; top: 0; padding: 6px 12px; border-radius: var(--r-pil); pointer-events: none; white-space: nowrap;
+  background: var(--donker); color: var(--tekst); font-size: var(--t-klein); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.modus button[data-modus="vrij"] { padding-inline: 14px; }
+@media (max-width: 900px) { .huis3d { inset: 0; } }
+.status-lijst { margin-bottom: 24px; }

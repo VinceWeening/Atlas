@@ -144,6 +144,18 @@ De Windows-app heeft geen spraakherkenning van de browser. Met een eigen Whisper
 
 Daarna neemt de spraakbol op tot je even stil bent, stuurt de opname naar Whisper en voert de opdracht uit. Elke server die `/v1/audio/transcriptions` kent werkt.
 
+### Lokale AI als hulp (Ollama)
+
+Zet `OLLAMA_URL` naar een eigen Ollama (bijvoorbeeld op de pc of later de Mac mini) en eventueel `OLLAMA_MODEL` (standaard `qwen2.5:3b`). Snapt de opdrachtbalk een zin niet, zoals "maak het donker in de woonkamer", dan herschrijft het model hem naar een zin die Atlas wel kent ("woonkamer uit") en zie je dat erbij staan. Het model bedient zelf niets: alleen de vaste zinnen doen iets in huis.
+
+## Het draaibare 3D-huis
+
+Kies naast het huis **Draai** voor een echt 3D-model (three.js): slepen draait, scrollen zoomt, klikken kiest een ruimte. Ruimtes met licht aan gloeien warm. Het model gebruikt dezelfde indeling als de plattegrond (`web/src/huis.ts`), dus de echte indeling komt er vanzelf in te staan. Het model wordt pas geladen als je Draai kiest.
+
+## Controleren wat werkt
+
+Tandwiel › Koppelingen › **Wat Atlas vindt** laat per onderdeel zien of het werkt: Home Assistant (met het aantal ruimtes en lampen), personen, energiemeters, afval, Frigate, meldingen, Google, Whisper, Buienradar en Ollama. Een warme stip is iets om naar te kijken, grijs staat uit.
+
 ## Thuis en weg, vertrekhulp en afval
 
 - **Thuis en weg** (tandwiel › Meldingen, staat uit): Atlas volgt de personen in Home Assistant. Gaat de laatste weg terwijl er lampen branden, dan krijg je op je telefoon één melding met de knop *Alles uit*. Atlas hoort die knop via de websocket van Home Assistant. Met *Camera's alleen als je weg bent* blijft je telefoon stil als er iemand thuis is (de pc meldt altijd).

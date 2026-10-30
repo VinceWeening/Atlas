@@ -13,7 +13,8 @@ import { voerUit } from './opdracht.js';
 import { Aanwezig } from './aanwezig.js';
 import { regen, volgendeVertrek } from './vertrek.js';
 import { middernacht } from './energie.js';
-import { naarTekst, spraakAan } from './spraak.js';
+import { naarTekst, spraakAan, spraakBereikbaar } from './spraak.js';
+import { aiBereikbaar, herschrijf } from './ai.js';
 import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
@@ -248,6 +249,93 @@ app.post('/api/spraak', async (request, reply) => {
   }
 });
 
+// Controlescherm: wat Atlas allemaal vindt, zodat je thuis in één oogopslag ziet wat werkt en wat nog moet.
+type Controle = { naam: string; staat: 'goed' | 'let-op' | 'uit'; tekst: string };
+app.get('/api/status', async () => {
+  const inst = instellingen();
+  const [h, e, a, frigate, spraak, buien, ai] = await Promise.allSettled([
+    huis.huis(),
+    huis.energie(),
+    huis.afval(),
+    meldingen.frigateCameras(),
+    spraakBereikbaar(),
+    regen(),
+    aiBereikbaar(),
+  ]);
+  const lijst: Controle[] = [];
+  const echt = !!ha;
+  if (!echt) lijst.push({ naam: 'Home Assistant', staat: 'uit', tekst: 'Niet ingesteld: vul HA_URL en HA_TOKEN in. Nu zie je het voorbeeldhuis.' });
+  else if (h.status === 'rejected') lijst.push({ naam: 'Home Assistant', staat: 'let-op', tekst: `Niet bereikbaar op ${ha.url}. Klopt het adres en de toegangscode?` });
+  else {
+    const lampen = h.value.kamers.reduce((n, k) => n + k.lampen.length, 0) + h.value.losseLampen.length;
+    lijst.push({ naam: 'Home Assistant', staat: 'goed', tekst: `${h.value.kamers.length} ruimtes, ${lampen} lampen, ${h.value.cameras.length} camera's, ${h.value.scenes.length} scènes` });
+  }
+  if (echt) {
+    const p = aanwezig.personen;
+    lijst.push(
+      p.length
+        ? { naam: 'Personen', staat: 'goed', tekst: p.map((x) => `${x.naam} (${x.thuis ? 'thuis' : 'weg'})`).join(', ') }
+        : { naam: 'Personen', staat: 'let-op', tekst: 'Geen personen gevonden; nodig voor Thuis en weg.' },
+    );
+  }
+  if (e.status === 'fulfilled') {
+    const v = e.value;
+    const gevonden = [v.vermogen != null && 'vermogen nu', v.vandaag.stroom != null && 'stroom', v.vandaag.terug != null && 'teruglevering', v.vandaag.gas != null && 'gas', v.vandaag.opwek != null && 'zon', v.thermostaat && 'thermostaat'].filter(Boolean);
+    lijst.push({
+      naam: 'Energie en klimaat',
+      staat: gevonden.length || v.kamers.length ? 'goed' : 'let-op',
+      tekst: gevonden.length || v.kamers.length ? `${gevonden.join(', ') || 'geen meters'}; klimaat in ${v.kamers.length} ruimtes` : 'Geen meters of sensoren gevonden.',
+    });
+  }
+  if (a.status === 'fulfilled')
+    lijst.push(
+      a.value.length
+        ? { naam: 'Afvalkalender', staat: 'goed', tekst: a.value.slice(0, 3).map((x) => `${x.naam} ${x.datum.slice(8, 10)}-${x.datum.slice(5, 7)}`).join(', ') }
+        : { naam: 'Afvalkalender', staat: 'let-op', tekst: 'Geen afvalsensoren; installeer Afvalwijzer (HVC) in Home Assistant.' },
+    );
+  lijst.push(
+    !meldingen.ingesteld
+      ? { naam: 'Frigate', staat: 'uit', tekst: 'Niet gevonden op poort 5000; vul eventueel FRIGATE_URL in.' }
+      : frigate.status === 'fulfilled'
+        ? { naam: 'Frigate', staat: 'goed', tekst: `${frigate.value.length} camera's` }
+        : { naam: 'Frigate', staat: 'let-op', tekst: 'Gevonden maar reageert niet.' },
+  );
+  lijst.push({
+    naam: 'Meldingen op de telefoon',
+    staat: inst.meldingen.telefoon && inst.meldingen.toestel ? 'goed' : 'uit',
+    tekst: inst.meldingen.telefoon && inst.meldingen.toestel ? inst.meldingen.toestel.replace('mobile_app_', '').replace(/_/g, ' ') : 'Uit, of geen telefoon gekozen (tandwiel › Meldingen).',
+  });
+  lijst.push(
+    !google
+      ? { naam: 'Google', staat: 'uit', tekst: 'Niet ingesteld: agenda en mail zijn voorbeeld.' }
+      : google.gekoppeld
+        ? { naam: 'Google', staat: 'goed', tekst: 'Agenda en mail gekoppeld' }
+        : { naam: 'Google', staat: 'let-op', tekst: 'Ingesteld maar nog niet gekoppeld (hieronder).' },
+  );
+  const spraakOk = spraak.status === 'fulfilled' ? spraak.value : false;
+  lijst.push(
+    spraakOk === null
+      ? { naam: 'Spraak (Whisper)', staat: 'uit', tekst: 'Geen WHISPER_URL: spraak via de browser, niet in de Windows-app.' }
+      : spraakOk
+        ? { naam: 'Spraak (Whisper)', staat: 'goed', tekst: 'Bereikbaar' }
+        : { naam: 'Spraak (Whisper)', staat: 'let-op', tekst: 'WHISPER_URL ingesteld, maar de server antwoordt niet.' },
+  );
+  lijst.push(
+    buien.status === 'fulfilled' && buien.value
+      ? { naam: 'Regen (Buienradar)', staat: 'goed', tekst: buien.value.tekst }
+      : { naam: 'Regen (Buienradar)', staat: 'let-op', tekst: 'Niet bereikbaar vanaf de server.' },
+  );
+  const aiOk = ai.status === 'fulfilled' ? ai.value : false;
+  lijst.push(
+    aiOk === null
+      ? { naam: 'Lokale AI (Ollama)', staat: 'uit', tekst: 'Geen OLLAMA_URL: de opdrachtbalk kent alleen vaste zinnen.' }
+      : aiOk
+        ? { naam: 'Lokale AI (Ollama)', staat: 'goed', tekst: 'Helpt bij zinnen die de opdrachtbalk niet kent' }
+        : { naam: 'Lokale AI (Ollama)', staat: 'let-op', tekst: 'OLLAMA_URL ingesteld, maar Ollama antwoordt niet.' },
+  );
+  return { lijst };
+});
+
 app.get('/api/aanwezig', async () => aanwezig.status());
 
 app.get('/api/afval', async (_request, reply) => {
@@ -271,6 +359,7 @@ app.post<{ Body: { tekst?: unknown } }>('/api/opdracht', async (request, reply) 
       lamp: (id, opdracht) => huis.lamp(id, opdracht),
       bedien: (id, aan) => huis.bedien(id, aan),
       scene: (id) => huis.scene(id),
+      hulp: herschrijf,
     });
   } catch (fout) {
     app.log.error(fout);

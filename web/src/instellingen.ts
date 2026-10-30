@@ -547,6 +547,41 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     return sectie;
   }
 
+  /** Wat Atlas allemaal vindt: groen is goed, warm is iets om naar te kijken, grijs staat uit. */
+  async function tekenStatus() {
+    const sectie = maak('section', 'inst-sectie');
+    const kop = maak('div', 'kop');
+    const opnieuw = knop('Opnieuw kijken', 'knop zacht');
+    kop.append(maak('h3', 'lbl', 'WAT ATLAS VINDT'), opnieuw);
+    const lijst = maak('ul', 'status-lijst');
+    sectie.append(kop, lijst);
+    const vul = async () => {
+      lijst.replaceChildren(maak('li', 'laden'), maak('li', 'laden kort'));
+      opnieuw.disabled = true;
+      try {
+        const data = (await (await fetch('/api/status')).json()) as { lijst: { naam: string; staat: string; tekst: string }[] };
+        lijst.replaceChildren(
+          ...data.lijst.map((c) => {
+            // De staat als data-attribuut: de klasse "uit" verbergt elk blok.
+            const rij = maak('li', 'status-rij');
+            rij.dataset.staat = c.staat;
+            const tekst = maak('div', 'status-tekst');
+            tekst.append(maak('strong', undefined, c.naam), maak('span', 'muted klein', c.tekst));
+            rij.append(maak('span', 'status-stip'), tekst);
+            rij.setAttribute('aria-label', `${c.naam}: ${c.staat === 'goed' ? 'werkt' : c.staat === 'uit' ? 'staat uit' : 'let op'}. ${c.tekst}`);
+            return rij;
+          }),
+        );
+      } catch {
+        lijst.replaceChildren(maak('li', 'muted klein', 'De server is niet bereikbaar.'));
+      }
+      opnieuw.disabled = false;
+    };
+    opnieuw.addEventListener('click', vul);
+    void vul();
+    return sectie;
+  }
+
   async function tekenVersie() {
     const sectie = maak('section', 'inst-sectie');
     sectie.append(maak('h3', 'lbl', 'ATLAS BIJWERKEN'));
@@ -605,7 +640,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       return;
     }
     const nieuw = versie.childElementCount > 2;
-    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [google, ...(nieuw ? [] : [versie])] };
+    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [await tekenStatus(), google, ...(nieuw ? [] : [versie])] };
     const balk = maak('div', 'inst-tabs');
     balk.setAttribute('role', 'tablist');
     balk.setAttribute('aria-label', 'Onderdelen van de instellingen');
