@@ -306,7 +306,7 @@ a.mailregel:hover strong { color: var(--ijs-licht); }
 .app.overzicht .kolommen { grid-row: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gat); align-items: start; }
 .kolom { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .kolom-kop { margin: 0 0 0 8px; font-family: var(--mono); font-size: var(--t-label); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--zacht); }
-.kolom:not(:has(> section:not(.uit, .leeg))) { display: none; }
+.app:not(.indelen) .kolom:not(:has(> section:not(.uit, .leeg))) { display: none; }
 .kolom > .dock { align-self: flex-start; }
 .app.overzicht :is(#dock-favorieten, #dock-scheiding) { display: none; }
 .kolom .camera { height: 220px; }
@@ -967,3 +967,83 @@ input::placeholder, textarea::placeholder { color: var(--zacht); opacity: 1; }
 /* Een nieuw antwoord in de opdrachtbalk komt zacht omhoog. */
 @keyframes antwoord-in { from { opacity: 0; transform: translateY(4px); } }
 .opdracht-antwoord.nieuw { animation: antwoord-in var(--duur-klein) var(--uit); }
+
+/* Overzicht zelf indelen: invouwen per blok en per kolom, en met Indelen blokken verbergen en tonen. */
+.blok-balk { display: none; }
+.app.overzicht .kolom > section > .blok-balk { position: absolute; z-index: 2; top: 18px; right: 16px; display: flex; align-items: center; gap: 2px; }
+.blok-balk .blok-naam { display: none; }
+.blok-balk .icoon-knop { width: 32px; height: 32px; opacity: 0.55; }
+.blok-balk .icoon-knop:hover, .blok-balk .icoon-knop:focus-visible { opacity: 1; }
+.blok-vouw svg, .kolom-vouw svg { transition: transform var(--duur-midden) var(--uit); }
+.blok-vouw[aria-expanded="false"] svg, .kolom-vouw[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.blok-oog { display: none !important; }
+.app.indelen .blok-oog { display: grid !important; }
+/* Ruimte voor de knopjes naast de kop van elk blok. */
+.app.overzicht .kolom > section:not(.voordeur) > .gl-in > :first-child { padding-right: 36px; }
+.app.overzicht.indelen .kolom > section:not(.voordeur) > .gl-in > :first-child { padding-right: 72px; }
+.app.overzicht .kolom .voordeur .camera-wissel { right: 56px; }
+.app.overzicht .kolom .voordeur > .blok-balk { top: 14px; right: 12px; border-radius: var(--r-pil); background: var(--donker); }
+/* Ingevouwen: alleen de naam en de pijl, op één regel. */
+.app.overzicht .kolom > section.ingevouwen > .gl-in { display: none; }
+.app.overzicht .kolom > section.ingevouwen > .blok-balk,
+.app.indelen .kolom > section.uit > .blok-balk {
+  position: static; justify-content: flex-end; gap: 4px; padding: 10px 12px 10px 24px; min-height: 56px;
+  border-radius: calc(var(--r-paneel) - 1px); background: linear-gradient(180deg, rgba(30,36,48,0.55) 0%, rgba(14,17,24,0.5) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
+}
+.app.overzicht .kolom > section.ingevouwen > .blok-balk .blok-naam,
+.app.indelen .kolom > section.uit > .blok-balk .blok-naam { display: block; margin-right: auto; }
+/* Indelen: verborgen blokken staan er gestippeld en doorzichtig bij, met alleen hun naam en een oog om ze te tonen. */
+.app.indelen .kolom > section.uit { display: block !important; opacity: 0.55; background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; outline: 1px dashed var(--rand-sterk); outline-offset: -1px; }
+.app.indelen .kolom > section.uit > .gl-in { display: none; }
+.app.indelen .kolom > section.uit > .blok-balk { background: none; box-shadow: none; }
+.app.indelen .kolom > section.uit .blok-vouw { display: none; }
+.app.indelen .kolom > section:not(.uit) { outline: 1px solid var(--rand-sterk); outline-offset: 3px; }
+/* Kolommen: een pijl naast de kolomkop vouwt de hele kolom in. */
+.kolom-kop { display: flex; align-items: center; gap: 6px; }
+.kolom-vouw { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--zacht); opacity: 0.7; }
+.kolom-vouw:hover, .kolom-vouw:focus-visible { opacity: 1; background: var(--vlak-2); }
+.app.overzicht .kolom.ingevouwen > :not(.kolom-kop) { display: none !important; }
+.indeel-hint { position: fixed; z-index: 20; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); animation: hint-in var(--duur-midden) var(--uit) both; }
+@keyframes hint-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.indeel-hint-in { display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 22px; font-size: var(--t-klein); color: var(--gedempt); }
+@media (max-width: 1000px) {
+  .indeel-hint { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 76px); }
+  .blok-balk .icoon-knop, .kolom-vouw { opacity: 0.8; }
+}
+.lamp:has(> .media-bediening) { flex-wrap: wrap; }
+.apparaat .media-knop { opacity: 0.85; }
+
+/* Speelt nu en de mediabediening bij Apparaten: afspelen, volume en bron in plaats van alleen een schakelaar. */
+.media-lijst { display: flex; flex-direction: column; gap: 16px; }
+.media-kaart { display: flex; flex-direction: column; gap: 12px; }
+.media-kaart + .media-kaart { padding-top: 16px; border-top: 1px solid var(--rand); }
+.media-kop { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.media-hoes { flex: none; width: 56px; height: 56px; display: grid; place-items: center; overflow: hidden; border-radius: 14px; background: var(--vlak-2); color: var(--zacht); }
+.media-hoes img { width: 100%; height: 100%; object-fit: cover; }
+.media-kop.speelt .media-hoes { box-shadow: 0 0 0 1px var(--vlak-ijs), 0 0 24px -6px rgba(168, 216, 255, 0.5); color: var(--ijs); }
+.media-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.media-tekst strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-tekst small { font-size: var(--t-klein); color: var(--gedempt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-bediening { display: flex; flex-direction: column; gap: 10px; }
+.apparaat .media-bediening { flex-basis: 100%; padding-left: 44px; }
+.media-spelen { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.media-knop { opacity: 0.85; color: var(--tekst); }
+.media-speel { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--tekst); color: var(--grond); transition: transform var(--duur-druk) var(--uit), background var(--duur-hover) var(--uit); }
+.media-speel:hover { background: var(--ijs-licht); }
+.media-geluid { display: flex; align-items: center; gap: 6px; }
+.media-geluid .schuif { flex: 1; min-width: 0; }
+.media-geluid .schuif input { --spoor: linear-gradient(90deg, var(--ijs) var(--vul, 0%), var(--vlak-3) var(--vul, 0%)); }
+.media-geluid .schuif-waarde { width: 44px; }
+.media-geluid > .lbl { flex: 1; text-align: center; }
+.media-onder { display: flex; align-items: center; gap: 8px; }
+.media-bron { flex: 1; min-width: 0; height: 40px; }
+.media-uit { margin-left: auto; }
+.media-aan { align-self: flex-start; height: 40px; }
+.media-uit-rij { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.media-chip { border: 0; color: var(--tekst); background: var(--vlak-2); padding: 6px 12px; }
+.media-chip[aria-expanded="true"] { background: var(--vlak-ijs); color: var(--ijs-licht); }
+/* Smalle telefoon: op Overzicht wijkt het voorbeeldlabel voor de knop Indelen; het staat ook bij tandwiel › Koppelingen. */
+@media (max-width: 600px) {
+  .balk-rechts:has(#indelen-knop:not([hidden])) .voorbeeld-chip { display: none; }
+}

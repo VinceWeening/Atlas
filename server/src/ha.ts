@@ -45,7 +45,29 @@ export type Apparaat = {
   bereikbaar: boolean;
   /** Bij lampen: helderheid en kleurtemperatuur. */
   lamp?: Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtemp'>;
+  /** Bij tv's en speakers: wat er speelt en wat je kunt bedienen. */
+  media?: MediaDelen;
 };
+/** Een tv of speaker (media_player): wat er speelt en welke knoppen het apparaat zelf kent. */
+export type MediaDelen = {
+  staat: 'speelt' | 'pauze' | 'aan' | 'uit';
+  titel: string | null;
+  /** Artiest, serie of zender. */
+  onder: string | null;
+  /** De app of bron die nu speelt, bijvoorbeeld SmartTube of Spotify. */
+  app: string | null;
+  /** 0 tot 100. */
+  volume: number | null;
+  stil: boolean | null;
+  bron: string | null;
+  bronnen: string[];
+  kan: { speel: boolean; vorige: boolean; volgende: boolean; volume: boolean; stappen: boolean; stil: boolean; bron: boolean; aan: boolean; uit: boolean };
+  /** Of er een hoes of stilstaand beeld is; op te halen via /api/media/:id/beeld. */
+  beeld: boolean;
+};
+export type Media = { id: string; naam: string; bereikbaar: boolean; media: MediaDelen };
+export const MEDIA_ACTIES = ['speel', 'vorige', 'volgende', 'volume', 'harder', 'zachter', 'stil', 'bron', 'aan', 'uit'] as const;
+export type MediaActie = (typeof MEDIA_ACTIES)[number];
 export type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
 
 /** Soorten die op het scherm Apparaten komen, in deze volgorde. Camera's hebben een eigen scherm. */
@@ -159,6 +181,41 @@ function lampDelen(t: Toestand): Pick<Lamp, 'helderheid' | 'dimbaar' | 'kleurtem
   };
 }
 
+// Wat een media_player kan, uit supported_features van Home Assistant.
+const KAN = { pauze: 1, volume: 4, stil: 8, vorige: 16, volgende: 32, aan: 128, uit: 256, stappen: 1024, bron: 2048, speel: 16384 };
+
+/** Wat er speelt op een tv of speaker, en welke knoppen hij kent. */
+function mediaDelen(t: Toestand): MediaDelen {
+  const a = t.attributes;
+  const f = Number(a.supported_features) || 0;
+  const kan = (bit: number) => (f & bit) !== 0;
+  const tekst = (w: unknown) => (typeof w === 'string' && w.trim() ? w.trim() : null);
+  const staat = t.state === 'playing' ? 'speelt' : t.state === 'paused' ? 'pauze' : ['off', 'standby', 'unavailable', 'unknown'].includes(t.state) ? 'uit' : 'aan';
+  const titel = tekst(a.media_title);
+  return {
+    staat,
+    titel,
+    onder: tekst(a.media_artist) ?? tekst(a.media_series_title) ?? tekst(a.media_channel) ?? tekst(a.media_album_name),
+    app: tekst(a.app_name),
+    volume: typeof a.volume_level === 'number' ? Math.round(a.volume_level * 100) : null,
+    stil: typeof a.is_volume_muted === 'boolean' ? a.is_volume_muted : null,
+    bron: tekst(a.source),
+    bronnen: Array.isArray(a.source_list) ? (a.source_list as unknown[]).filter((b): b is string => typeof b === 'string').slice(0, 40) : [],
+    kan: {
+      speel: kan(KAN.pauze) || kan(KAN.speel),
+      vorige: kan(KAN.vorige),
+      volgende: kan(KAN.volgende),
+      volume: kan(KAN.volume),
+      stappen: kan(KAN.stappen),
+      stil: kan(KAN.stil),
+      bron: kan(KAN.bron) && Array.isArray(a.source_list) && a.source_list.length > 0,
+      aan: kan(KAN.aan),
+      uit: kan(KAN.uit),
+    },
+    beeld: staat !== 'uit' && typeof a.entity_picture === 'string',
+  };
+}
+
 /** De naam uit Home Assistant, of anders een leesbare naam uit de entiteit: sensor.woonkamer_temp wordt "Woonkamer temp". */
 function vriendelijk(t: Toestand) {
   const naam = t.attributes.friendly_name?.trim();
@@ -201,6 +258,7 @@ function alsApparaat(t: Toestand, ruimte?: string): Apparaat {
     bediening: schakelbaar ? 'schakel' : soort === 'scene' || soort === 'script' ? 'start' : null,
     bereikbaar,
     ...(soort === 'light' ? { lamp: lampDelen(t) } : {}),
+    ...(soort === 'media_player' ? { media: mediaDelen(t) } : {}),
   };
 }
 
@@ -464,6 +522,45 @@ export class HomeAssistant {
       soort === 'select' ? 'select_option' : soort === 'number' ? 'set_value' : soort === 'button' ? 'press' : waarde ? 'turn_on' : 'turn_off';
     const extra = soort === 'select' ? { option: waarde } : soort === 'number' ? { value: waarde } : {};
     await this.vraag(`/api/services/${soort}/${dienst}`, { method: 'POST', body: JSON.stringify({ entity_id: optie.id, ...extra }) });
+  }
+
+  /** Alle tv's en speakers, wat er speelt eerst. */
+  async media(): Promise<Media[]> {
+    const toestanden = (await (await this.vraag('/api/states')).json()) as Toestand[];
+    const volgorde = { speelt: 0, pauze: 1, aan: 2, uit: 3 };
+    return toestanden
+      .filter((t) => t.entity_id.startsWith('media_player.'))
+      .map((t) => ({ id: t.entity_id, naam: vriendelijk(t), bereikbaar: t.state !== 'unavailable', media: mediaDelen(t) }))
+      .sort((a, b) => volgorde[a.media.staat] - volgorde[b.media.staat] || a.naam.localeCompare(b.naam, 'nl'));
+  }
+
+  /** Bedient een tv of speaker. Volume is 0 tot 100; bron is een naam uit de bronnenlijst van het apparaat. */
+  async mediaBedien(entiteit: string, actie: MediaActie, waarde?: number | boolean | string) {
+    const diensten: Record<MediaActie, [string, Record<string, unknown>]> = {
+      speel: ['media_play_pause', {}],
+      vorige: ['media_previous_track', {}],
+      volgende: ['media_next_track', {}],
+      volume: ['volume_set', { volume_level: Number(waarde) / 100 }],
+      harder: ['volume_up', {}],
+      zachter: ['volume_down', {}],
+      stil: ['volume_mute', { is_volume_muted: waarde === true }],
+      bron: ['select_source', { source: String(waarde) }],
+      aan: ['turn_on', {}],
+      uit: ['turn_off', {}],
+    };
+    const [dienst, extra] = diensten[actie];
+    await this.vraag(`/api/services/media_player/${dienst}`, { method: 'POST', body: JSON.stringify({ entity_id: entiteit, ...extra }) });
+  }
+
+  /** De hoes of het stilstaande beeld van wat er speelt. */
+  async mediaBeeld(entiteit: string) {
+    const t = (await (await this.vraag(`/api/states/${entiteit}`)).json()) as Toestand;
+    const pad = t.attributes.entity_picture;
+    if (typeof pad !== 'string') return null;
+    // Meestal een pad binnen Home Assistant (/api/media_player_proxy/...); soms een adres op internet.
+    const antwoord = pad.startsWith('/') ? await this.vraag(pad) : await fetch(pad, { signal: AbortSignal.timeout(8000) });
+    if (!antwoord.ok) return null;
+    return { type: antwoord.headers.get('content-type') ?? 'image/jpeg', data: Buffer.from(await antwoord.arrayBuffer()) };
   }
 
   async scene(entiteit: string) {

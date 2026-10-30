@@ -1,6 +1,7 @@
 // De schermen Apparaten (alles uit Home Assistant per ruimte) en Camera's (alle camera's tegelijk).
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { meldFout, post } from './melding';
+import { mediaBediening, mediaBezig, type MediaDelen } from './media';
 
 type Apparaat = {
   id: string;
@@ -11,6 +12,7 @@ type Apparaat = {
   bediening: 'schakel' | 'start' | null;
   bereikbaar: boolean;
   lamp?: LampDelen;
+  media?: MediaDelen;
 };
 type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
 type Camera = { id: string; naam: string };
@@ -219,6 +221,9 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     }
     const schuiven = lampSchuiven(a, () => setTimeout(laad, 400));
     if (schuiven) r.append(schuiven);
+    // Tv's en speakers: afspelen, volume en bron onder de rij. Aan en uit blijft de schakelaar.
+    const media = a.media && mediaBediening({ ...a, media: a.media }, () => setTimeout(laad, 400), false);
+    if (media) r.append(media);
     return r;
   }
 
@@ -265,7 +270,8 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
       staat.fout = true;
     }
     // Niet opnieuw tekenen terwijl iemand een schakelaar indrukt of een naam aan het typen is.
-    if (!staat.bezig.size && !schuiftNu() && !staat.bewerkt) teken();
+    const kiest = lijst.contains(document.activeElement) && document.activeElement?.matches('select');
+    if (!staat.bezig.size && !schuiftNu() && !mediaBezig() && !kiest && !staat.bewerkt) teken();
   }
 
   teken();

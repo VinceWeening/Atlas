@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Google, type Afspraak } from './google.js';
-import { BEDIENBAAR, HomeAssistant, haInstellingen } from './ha.js';
+import { BEDIENBAAR, HomeAssistant, MEDIA_ACTIES, type MediaActie, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
 import { Apps } from './apps.js';
@@ -212,6 +212,38 @@ app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id
   if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Apparaat niet gevonden' });
   await huis.bedien(id, request.body.aan);
   return { ok: true };
+});
+
+// Tv's en speakers: wat er speelt, en afspelen, volume en bron bedienen.
+app.get('/api/media', async (_request, reply) => {
+  try {
+    return metEigenNamen(await huis.media());
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+app.post<{ Params: { id: string }; Body: { actie?: unknown; waarde?: unknown } }>('/api/media/:id', async (request, reply) => {
+  const id = entiteit('media_player', request.params.id);
+  const { actie, waarde } = request.body ?? {};
+  const geldig =
+    MEDIA_ACTIES.includes(actie as MediaActie) &&
+    (actie !== 'volume' || (Number.isInteger(waarde) && (waarde as number) >= 0 && (waarde as number) <= 100)) &&
+    (actie !== 'stil' || typeof waarde === 'boolean') &&
+    (actie !== 'bron' || (typeof waarde === 'string' && waarde.length > 0 && waarde.length <= 100));
+  if (!id || !geldig) return reply.code(400).send({ fout: 'Onbekend apparaat of opdracht' });
+  if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Apparaat niet gevonden' });
+  await huis.mediaBedien(id, actie as MediaActie, waarde as number | boolean | string | undefined);
+  return { ok: true };
+});
+
+app.get<{ Params: { id: string } }>('/api/media/:id/beeld', async (request, reply) => {
+  const id = entiteit('media_player', request.params.id);
+  if (!id) return reply.code(400).send({ fout: 'Onbekend apparaat' });
+  const beeld = await huis.mediaBeeld(id).catch(() => null);
+  if (!beeld) return reply.code(404).send({ fout: 'Geen beeld' });
+  return reply.header('cache-control', 'max-age=60').type(beeld.type).send(beeld.data);
 });
 
 app.get('/api/energie', async (_request, reply) => {

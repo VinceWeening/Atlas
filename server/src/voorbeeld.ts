@@ -1,5 +1,5 @@
 import type { Energie } from './energie.js';
-import type { Apparaat, Apparaten, CameraOptie, Huis, Lamp } from './ha.js';
+import type { Apparaat, Apparaten, CameraOptie, Huis, Lamp, Media, MediaActie } from './ha.js';
 
 // Voorbeeldgegevens. Agenda en mail blijven voorbeeld tot de Google-koppeling er is;
 // het huis gebruikt dit alleen als er geen Home Assistant is ingesteld.
@@ -47,8 +47,67 @@ export class VoorbeeldHuis {
     binnen: 20,
   };
 
+  /** Een tv die speelt en een speaker die uit staat, zodat je ziet hoe de bediening eruitziet. */
+  private mediaLijst: Media[] = [
+    {
+      id: 'media_player.tv_woonkamer',
+      naam: 'Tv woonkamer',
+      bereikbaar: true,
+      media: {
+        staat: 'speelt',
+        titel: 'Planet Earth III',
+        onder: 'Aflevering 2 · Oceaan',
+        app: 'SmartTube',
+        volume: 18,
+        stil: false,
+        bron: 'SmartTube',
+        bronnen: ['SmartTube', 'Jellyfin', 'HDMI 1', 'Zen'],
+        kan: { speel: true, vorige: true, volgende: true, volume: true, stappen: true, stil: true, bron: true, aan: true, uit: true },
+        beeld: false,
+      },
+    },
+    {
+      id: 'media_player.speaker_keuken',
+      naam: 'Speaker keuken',
+      bereikbaar: true,
+      media: {
+        staat: 'uit',
+        titel: null,
+        onder: null,
+        app: null,
+        volume: 30,
+        stil: false,
+        bron: null,
+        bronnen: [],
+        kan: { speel: true, vorige: true, volgende: true, volume: true, stappen: true, stil: true, bron: false, aan: true, uit: true },
+        beeld: false,
+      },
+    },
+  ];
+
   async huis() {
     return this.staat;
+  }
+
+  async media() {
+    return this.mediaLijst;
+  }
+
+  async mediaBedien(entiteit: string, actie: MediaActie, waarde?: number | boolean | string) {
+    const m = this.mediaLijst.find((x) => x.id === entiteit)?.media;
+    if (!m) return;
+    if (actie === 'speel') m.staat = m.staat === 'speelt' ? 'pauze' : 'speelt';
+    else if (actie === 'volume') m.volume = Number(waarde);
+    else if (actie === 'harder') m.volume = Math.min(100, (m.volume ?? 0) + 5);
+    else if (actie === 'zachter') m.volume = Math.max(0, (m.volume ?? 0) - 5);
+    else if (actie === 'stil') m.stil = waarde === true;
+    else if (actie === 'bron') m.bron = m.app = String(waarde);
+    else if (actie === 'aan') m.staat = 'aan';
+    else if (actie === 'uit') m.staat = 'uit';
+  }
+
+  async mediaBeeld(_entiteit: string): Promise<{ type: string; data: Buffer } | null> {
+    return null;
   }
 
   async energie(): Promise<Energie> {
@@ -82,7 +141,7 @@ export class VoorbeeldHuis {
   async melding(_toestel: string, _titel: string, _tekst: string) {}
 
   async bestaat(entiteit: string) {
-    return this.alleLampen().some((l) => l.id === entiteit) || this.staat.scenes.some((s) => s.id === entiteit);
+    return this.alleLampen().some((l) => l.id === entiteit) || this.staat.scenes.some((s) => s.id === entiteit) || this.mediaLijst.some((m) => m.id === entiteit);
   }
 
   async lamp(entiteit: string, opdracht: { aan?: boolean; helderheid?: number; kelvin?: number }) {
@@ -123,11 +182,26 @@ export class VoorbeeldHuis {
           ...(k.temperatuur != null ? [sensor(`sensor.${k.id}_temperatuur`, 'Temperatuur', `${k.temperatuur.toLocaleString('nl-NL')} °C`)] : []),
         ],
       })),
-      overig: this.staat.scenes.map((s) => ({ id: s.id, naam: s.naam, soort: 'scene', tekst: '', aan: null, bediening: 'start', bereikbaar: true })),
+      overig: [
+        ...this.mediaLijst.map(
+          (m): Apparaat => ({
+            id: m.id,
+            naam: m.naam,
+            soort: 'media_player',
+            tekst: m.media.staat === 'speelt' && m.media.titel ? `Speelt · ${m.media.titel}` : m.media.staat === 'uit' ? 'Uit' : 'Aan',
+            aan: m.media.staat !== 'uit',
+            bediening: 'schakel',
+            bereikbaar: true,
+            media: m.media,
+          }),
+        ),
+        ...this.staat.scenes.map((s): Apparaat => ({ id: s.id, naam: s.naam, soort: 'scene', tekst: '', aan: null, bediening: 'start', bereikbaar: true })),
+      ],
     };
   }
 
   async bedien(entiteit: string, aan: boolean) {
+    if (entiteit.startsWith('media_player.')) return this.mediaBedien(entiteit, aan ? 'aan' : 'uit');
     await this.lamp(entiteit, { aan });
   }
 

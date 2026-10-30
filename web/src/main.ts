@@ -8,6 +8,8 @@ import { begroeting, startGlans } from './glans';
 import { tekenLucht } from './lucht';
 import { laadEnergie } from './energie';
 import { kanSpraak, startOpdracht } from './opdracht';
+import { maakIndelen } from './indelen';
+import { maakMediaBlok } from './media';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -605,6 +607,32 @@ function zetBlokken(overzicht: boolean) {
 
 let wisselKlaar: ReturnType<typeof setTimeout> | undefined;
 
+/** Instellingen bewaren vanaf het scherm zelf (niet uit het tandwiel), en meteen toepassen. */
+async function bewaarInst(deel: Partial<Instellingen>) {
+  try {
+    const antwoord = await fetch('/api/instellingen', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(deel),
+    });
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    zetInst(await antwoord.json());
+  } catch (fout) {
+    console.error('Bewaren mislukt', fout);
+    meldFout('Bewaren lukte niet');
+  }
+}
+
+const indelen = maakIndelen({
+  ingevouwen: () => staat.inst?.ingevouwen ?? [],
+  blokAan: (id) => staat.inst?.blokken[id] !== false,
+  bewaar: bewaarInst,
+});
+const mediaBlok = maakMediaBlok($('media-blok'), $('media-lijst'));
+const laadMedia = () => {
+  if (staat.inst?.blokken.media !== false && staat.scherm === 'overzicht') void mediaBlok.laad();
+};
+
 // Schermen en blokken uit het tandwiel.
 function pasToe() {
   const blokken = staat.inst?.blokken ?? {};
@@ -626,6 +654,8 @@ function pasToe() {
   }
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
+  indelen.pasToe();
+  laadMedia();
   $('pagina-apparaten').hidden = staat.scherm !== 'apparaten';
   $('pagina-cameras').hidden = staat.scherm !== 'cameras';
   if (staat.scherm === 'apparaten') apparaten.laad();
@@ -1345,6 +1375,7 @@ laadVertrek();
 setInterval(() => document.visibilityState === 'visible' && laadVertrek(), 120_000);
 laadEnergie();
 setInterval(() => document.visibilityState === 'visible' && staat.inst?.blokken.energie !== false && laadEnergie(), 30_000);
+setInterval(() => document.visibilityState === 'visible' && laadMedia(), 5_000);
 // Als app op de telefoon: de schil bewaren voor snel openen. Werkt alleen via https (Tailscale) of localhost.
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 tekenAlles();
