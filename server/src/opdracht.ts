@@ -1,6 +1,6 @@
 // Opdrachten in gewone taal, getypt in de opdrachtbalk of later uitgesproken: "woonkamer uit", "dim bureau naar 30%",
 // "filmavond", "hoe warm is het boven". Geen AI: een vaste set zinnen die Atlas zeker goed begrijpt. Alleen lampen,
-// schakelaars en scènes; sloten en camera's nooit.
+// schakelaars en scènes; sloten en camera's nooit. Wat geen opdracht is, gaat naar de AI als die aan staat (zie ai.ts).
 
 import type { Energie } from './energie.js';
 import type { Apparaat, Apparaten, Huis } from './ha.js';
@@ -13,8 +13,12 @@ export type Antwoord = {
   scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras';
   /** Als de lokale AI de zin herschreef: wat Atlas ervan maakte. */
   begrepen?: string;
-  /** Of het antwoord van de lokale AI komt (een vrije vraag), zodat de app dat kan laten zien. */
+  /** Of het antwoord van een AI komt (een vrije vraag), zodat de app dat kan laten zien. */
   ai?: boolean;
+  /** Welke AI: de lokale op de eigen server, of Claude via internet. */
+  bron?: 'lokaal' | 'claude';
+  /** Pagina's die Claude op internet vond voor dit antwoord. */
+  bronnen?: { titel: string; url: string }[];
 };
 
 export type Bron = {
@@ -24,10 +28,12 @@ export type Bron = {
   lamp(id: string, opdracht: { aan?: boolean; helderheid?: number }): Promise<void>;
   bedien(id: string, aan: boolean): Promise<void>;
   scene(id: string): Promise<void>;
-  /** Optioneel: lokale AI die een onbekende zin herschrijft naar een zin die Atlas kent. */
+  /** Optioneel: AI die een onbekende zin herschrijft naar een zin die Atlas kent. */
   hulp?: (zin: string, namen: { ruimtes: string[]; apparaten: string[]; scenes: string[] }) => Promise<string | null>;
-  /** Optioneel: lokale AI die een vrije vraag beantwoordt met wat Atlas weet. Bedient zelf niets. */
-  vraag?: (zin: string) => Promise<string | null>;
+  /** Optioneel: AI die een vrije vraag beantwoordt met wat Atlas weet en algemene kennis. Bedient zelf niets. */
+  vraag?: (zin: string) => Promise<{ tekst: string; bron: 'lokaal' | 'claude'; bronnen?: { titel: string; url: string }[] } | null>;
+  /** Of er net al een gesprek met de AI loopt; dan is een losse zin als "en morgen?" een vervolgvraag. */
+  gesprek?: boolean;
 };
 
 /** Kleine letters, zonder accenten en leestekens, zodat "Camera's" en "cameras" hetzelfde zijn. */
@@ -87,7 +93,10 @@ export async function voerUit(invoer: string, bron: Bron): Promise<Antwoord> {
   const kamerIn = () => huis.kamers.map((k) => ({ k, score: past(k.naam, z) })).filter((x) => x.score).sort((a, b) => b.score - a.score)[0]?.k;
 
   // Vragen
-  if (heeft(/\b(hoe (warm|koud)|temperatuur|graden|hoe heet)\b/)) {
+  // Met een AI erbij gaan algemene vragen ("hoe warm is de zon?", "hoeveel stroom kost een waterkoker?") naar de AI;
+  // alleen vragen over dit huis beantwoordt Atlas zelf.
+  const overHuis = (re: RegExp) => !bron.vraag || re.test(zin);
+  if (heeft(/\b(hoe (warm|koud)|temperatuur|graden|hoe heet)\b/) && (kamerIn() || overHuis(/\b(het|binnen|buiten|huis)\b/))) {
     const kamer = kamerIn();
     if (kamer?.temperatuur != null) return { tekst: `In ${kamer.naam} is het ${graden(kamer.temperatuur)}.`, gedaan: false };
     const delen = [];
@@ -99,7 +108,7 @@ export async function voerUit(invoer: string, bron: Bron): Promise<Antwoord> {
     const aan = [...huis.kamers.flatMap((k) => k.lampen.filter((l) => l.aan).map((l) => l.naam)), ...huis.losseLampen.filter((l) => l.aan).map((l) => l.naam)];
     return { tekst: aan.length ? `Er ${aan.length === 1 ? 'is één lamp' : `zijn ${aan.length} lampen`} aan: ${lijstje(aan)}.` : 'Alle lampen zijn uit.', gedaan: false };
   }
-  if (heeft(/\b(stroom|verbruik|energie|watt|gas)\b/) && heeft(/\b(hoeveel|wat|hoe)\b/)) {
+  if (heeft(/\b(stroom|verbruik|energie|watt|gas)\b/) && heeft(/\b(hoeveel|wat|hoe)\b/) && overHuis(/\b(we|wij|ik|het huis|nu|vandaag|verbruiken|gebruiken)\b/)) {
     const e = await bron.energie();
     const delen = [];
     if (e.vermogen != null) delen.push(e.vermogen < 0 ? `Je levert nu ${-e.vermogen} watt terug` : `Het huis gebruikt nu ${e.vermogen} watt`);
@@ -142,18 +151,22 @@ export async function voerUit(invoer: string, bron: Bron): Promise<Antwoord> {
 
   // Lokale AI aan: laat het model een onduidelijke zin herschrijven, en probeer die één keer. Zelf bedient het model niets.
   // Is het eerder een vraag dan een opdracht, dan krijgt het model hem als vraag; met wat Atlas weet antwoordt het kort.
-  const isVraag = /\?\s*$/.test(invoer) || /^(wat|wie|wanneer|waar|waarom|hoe|hoeveel|welke|welk|moet|heb|hebben|is|zijn|kan|kun|zal|wordt|komt|gaat|regent|vertel)\b/.test(zin);
+  // Ook verzoeken als "leg uit…", "bedenk…" of "vertaal…" zijn voor de AI, net als een vervolgvraag in een gesprek.
+  const isVraag =
+    /\?\s*$/.test(invoer) ||
+    /^(wat|wie|wanneer|waar|waarom|hoe|hoeveel|hoelang|welke|welk|moet|heb|hebben|is|zijn|kan|kun|kunnen|zal|zou|wordt|komt|gaat|regent|vertel|leg|geef|noem|bedenk|schrijf|maak een|vertaal|reken|bereken|zoek|help|wil|weet|ik|en|waarvoor|wat als)\b/.test(zin) ||
+    (!!bron.gesprek && !aan && !uit);
   const metHulp = async (anders: Antwoord): Promise<Antwoord> => {
     if (!isVraag) {
       const nieuw = await bron.hulp?.(invoer, { ruimtes: huis.kamers.map((k) => k.naam), apparaten: bedienbaar.map((a) => a.naam), scenes: huis.scenes.map((s) => s.naam) });
       if (nieuw && gewoon(nieuw) !== gewoon(invoer)) {
-        const tweede = await voerUit(nieuw, { ...bron, hulp: undefined, vraag: undefined });
+        const tweede = await voerUit(nieuw, { ...bron, hulp: undefined, vraag: undefined, gesprek: false });
         if (!tweede.tekst.startsWith('Dat snap ik nog niet')) return { ...tweede, begrepen: nieuw };
       }
     }
     if (!bron.vraag || (!isVraag && !anders.tekst.startsWith('Dat snap ik nog niet'))) return anders;
     const antwoord = await bron.vraag(invoer.trim());
-    return antwoord ? { tekst: antwoord, gedaan: false, ai: true } : anders;
+    return antwoord ? { tekst: antwoord.tekst, gedaan: false, ai: true, bron: antwoord.bron, ...(antwoord.bronnen ? { bronnen: antwoord.bronnen } : {}) } : anders;
   };
   if (!apparaat && !kamer) return metHulp({ tekst: `Dat snap ik nog niet. ${VOORBEELD}`, gedaan: false });
   if (!aan && !uit) return metHulp({ tekst: `${(apparaat && (!kamer || apparaat.score > kamer.score) ? apparaat.a.naam : kamer!.k.naam)}: aan of uit?`, gedaan: false });

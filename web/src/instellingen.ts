@@ -31,7 +31,7 @@ export type Instellingen = {
   standen: { ochtend: Periode; avond: Periode };
   weg: { aan: boolean; allesUit: boolean; alleenWeg: boolean };
   vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
-  assistent: { vragen: boolean; hardop: boolean };
+  assistent: { vragen: boolean; hardop: boolean; cloud: boolean; overMij: string };
   weergave: { rustig: boolean; beweging: boolean; agendaAantal: number; mailAantal: number };
 };
 type Opties = {
@@ -370,11 +370,11 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     });
     vertrek.append(reistijdRij, plekken, vertrekOpslaan, vertrekMelding);
 
-    // Spraak en de lokale AI: twee schakelaars. Of Whisper en Ollama er zijn, staat bij Controle.
+    // Spraak en AI: drie schakelaars en wat je over jezelf vertelt. Of Whisper, Ollama en Claude er zijn, staat bij Controle.
     const assistent = maak('section', 'inst-sectie');
     assistent.append(
       maak('h3', 'lbl', 'SPRAAK EN AI'),
-      maak('p', 'muted klein', 'Ctrl+Spatie of de spraakbol: meteen spreken. De lokale AI draait op je eigen server en bedient zelf niets; hij helpt alleen zinnen begrijpen en beantwoordt vragen met wat Atlas weet.'),
+      maak('p', 'muted klein', 'Ctrl+Spatie of de spraakbol: meteen spreken. De AI bedient zelf niets; hij helpt zinnen begrijpen en beantwoordt vragen, over je dag en huis maar ook algemene vragen. Je kunt doorvragen.'),
     );
     const lokaalA = { ...inst.assistent };
     const bewaarA = async (deel: Partial<Instellingen['assistent']>) => {
@@ -382,9 +382,29 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       inst = await bewaar({ assistent: deel });
     };
     assistent.append(
-      schakelaarRij('Vragen beantwoorden', lokaalA.vragen, (aan) => bewaarA({ vragen: aan }), 'Zoals “wat staat er vandaag nog?”; alleen met OLLAMA_URL'),
+      schakelaarRij('Vragen beantwoorden', lokaalA.vragen, (aan) => bewaarA({ vragen: aan }), 'Zoals “wat staat er vandaag nog?” of “hoe lang kook ik een ei?”; met OLLAMA_URL of ANTHROPIC_API_KEY'),
+      schakelaarRij('Claude via internet', lokaalA.cloud, (aan) => bewaarA({ cloud: aan }), 'Slimmer en zoekt actuele dingen op; agenda, mailonderwerpen en huis gaan dan mee naar Anthropic. Uit = alleen lokale AI'),
       schakelaarRij('Antwoorden hardop', lokaalA.hardop, (aan) => bewaarA({ hardop: aan }), 'Alleen als je iets zei, niet als je typte'),
     );
+    // Over mij: een paar regels die de AI bij elke vraag meekrijgt. Blijft op de server.
+    const overMij = maak('textarea', 'inst-veld inst-tekstvak');
+    overMij.rows = 4;
+    overMij.maxLength = 3000;
+    overMij.placeholder = 'Bijvoorbeeld: ik loop stage bij …, ik sport op dinsdag, ik eet vegetarisch.';
+    overMij.value = lokaalA.overMij;
+    overMij.setAttribute('aria-label', 'Over mij');
+    const overMijOpslaan = knop('Opslaan');
+    const overMijMelding = maak('p', 'klein muted');
+    overMijMelding.setAttribute('role', 'status');
+    overMijOpslaan.addEventListener('click', async () => {
+      try {
+        await bewaarA({ overMij: overMij.value });
+        overMijMelding.textContent = 'Opgeslagen.';
+      } catch (fout) {
+        overMijMelding.textContent = (fout as Error).message;
+      }
+    });
+    assistent.append(maak('p', 'muted klein', 'Over mij: wat de AI over je mag weten, zodat antwoorden beter passen.'), overMij, overMijOpslaan, overMijMelding);
 
     return {
       scherm: [rust, start, standen, assistent, blokken],

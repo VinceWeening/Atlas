@@ -41,6 +41,10 @@ services:
       OLLAMA_URL: ""
       # qwen2.5:3b past op een server met ongeveer 3 GB vrij geheugen; anders qwen2.5:1.5b. Atlas haalt het model zelf op.
       OLLAMA_MODEL: "qwen2.5:3b"
+      # Slimmere antwoorden via internet (zie README): een API-sleutel van platform.claude.com. Leeg = geen Claude.
+      ANTHROPIC_API_KEY: ""
+      # Zuiniger: claude-haiku-5-5.
+      ANTHROPIC_MODEL: "claude-opus-5-5"
 
 volumes:
   atlas-data:
