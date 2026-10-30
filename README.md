@@ -187,6 +187,16 @@ Alles wordt op de server bewaard in het volume `atlas-data`, dus pc en telefoon 
 
 ## Zelf ontwikkelen
 
+### Rust en meldingen
+
+Onder **Instellingen → Scherm → Rust en overzicht** kies je rustige vormgeving, beweging aan/uit en 1, 3 of 5 regels voor agenda en mail. Met **Rustige basisindeling** vouw je extra kaarten in op Overzicht; je kunt elk blok daarna zelf uitvouwen of aan/uit zetten. Bestaande blokkeuzes blijven behouden totdat je die knop gebruikt.
+
+De knop **Meldingen** in de bovenbalk opent direct de meldingsinstellingen. Pop-ups in de pagina, Windows-meldingen en telefoonmeldingen hebben eigen schakelaars. Pauzeer meldingen voor één of acht uur, hervat ze, stel stille uren in en kies een pop-upduur van 4, 8 of 12 seconden. Per ophaalronde verschijnt maximaal één pop-up; bij meerdere gebeurtenissen zie je het aantal. Camera's, personen, zones en gezichtsfilters staan onder een uitklapbaar onderdeel. Stille en gepauzeerde cameragebeurtenissen blijven in Vandaag gezien beschikbaar. Een expliciete testmelding omzeilt de stilte, maar respecteert uitgeschakelde kanalen.
+
+De melding **Lampen nog aan / Alles uit?** volgt eveneens de telefoonschakelaar, stille uren en tijdelijke pauze. De instelling **Camera's alleen als je weg bent** geldt zoals voorheen alleen voor de telefoon.
+
+`npm test` controleert migratie van bestaande instellingen, invoervalidatie, kanalen, stille uren over middernacht, het aflopen van pauzes en de echte vertrekherinneringsroute. Deze tests gebruiken tijdelijke gegevens en sturen geen echte meldingen.
+
 ```bash
 npm install
 npm run build && npm start      # server + scherm op http://localhost:8790

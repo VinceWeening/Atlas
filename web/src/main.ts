@@ -112,7 +112,7 @@ function ruimteBij(kamerId: string): Ruimte | undefined {
 const lichtAan = (r: Ruimte) => !!kamerBij(r)?.lampen.some((l) => l.aan);
 
 // Het draaibare 3D-model (three.js) laadt pas als je het voor het eerst kiest.
-let huis3d: { zet: (s: { gekozen: string | null; verdieping: string }) => void; start: () => void; stop: () => void } | null = null;
+let huis3d: { zet: (s: { gekozen: string | null; verdieping: string }) => void; start: () => void; stop: () => void; beweging: (aan: boolean) => void } | null = null;
 let huis3dLaden: Promise<void> | null = null;
 const huis3dVak = maak('div', 'huis3d');
 function tekenHuis3d() {
@@ -120,6 +120,7 @@ function tekenHuis3d() {
   huis.classList.add('vrij');
   if (huis.firstChild !== huis3dVak) huis.replaceChildren(huis3dVak);
   const zet = () => {
+    huis3d!.beweging(!rustig());
     huis3d!.zet({ gekozen: staat.gekozen, verdieping: staat.verdieping });
     huis3d!.start();
   };
@@ -152,7 +153,7 @@ function tekenHuis3d() {
 // elkaar wisselen (scrollen, pijltjes) loopt vloeiend door in plaats van terug te springen.
 const BINNEN = 'cubic-bezier(0.05, 0.7, 0.1, 1)';
 const WEG = 'cubic-bezier(0.3, 0, 0.8, 0.15)';
-const rustig = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rustig = () => staat.inst?.weergave.beweging === false || matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Waar het huis en elke verdieping nu staan, midden in een beweging ook. */
 function waarStaat(gebouw: HTMLElement) {
@@ -193,6 +194,7 @@ function beweegStapel(gebouw: HTMLElement, vorig: ReturnType<typeof waarStaat>, 
 
 /** 2D: de oude verdieping gaat kort weg, de nieuwe komt binnen uit de richting waar hij in het huis zit. */
 function wisselPlat(oud: HTMLElement, nieuw: HTMLElement, omhoog: boolean) {
+  if (rustig()) { oud.remove(); return; }
   const huis = $('huis');
   oud.style.pointerEvents = 'none';
   oud.setAttribute('aria-hidden', 'true');
@@ -723,6 +725,14 @@ function pasToe() {
   const huisUit = blokken.huis === false;
   const achter = overzicht || pagina || (huisUit && !staat.huisVoor);
   const app = document.querySelector('.app')!;
+  app.classList.toggle('rustig', staat.inst?.weergave.rustig !== false);
+  app.classList.toggle('zonder-beweging', rustig());
+  huis3d?.beweging(!rustig());
+  const pauze = (staat.inst?.meldingen.pauzeTot ?? 0) > Date.now();
+  tekst($('meldingen-status'), pauze ? 'Meldingen gepauzeerd' : 'Meldingen');
+  $('meldingen-knop').classList.toggle('gepauzeerd', pauze);
+  $('meldingen-knop').setAttribute('aria-label', pauze ? 'Meldingen gepauzeerd. Open meldingsinstellingen' : 'Meldingsinstellingen openen');
+  if (pauze || staat.inst?.meldingen.popup === false) $('toasts').replaceChildren();
   if (app.classList.contains('overzicht') !== overzicht) zetBlokken(overzicht);
   // Bij een ander scherm komen de panelen kort na elkaar zacht binnen.
   if (app.getAttribute('data-scherm') !== staat.scherm) {
@@ -831,12 +841,11 @@ function tekenBelangrijk() {
 }
 
 // Meldingen van Frigate in beeld, zolang de pagina open staat. De Windows-app laat ze ook zien als het venster verstopt is.
-type Melding = { volg: number; titel: string; tekst: string; beeld: string | null; pc: boolean };
+type Melding = { volg: number; titel: string; tekst: string; beeld: string | null; pc: boolean; popup?: boolean; test?: boolean };
 let laatsteMelding: number | null = null;
-function toonMelding(m: Melding) {
-  const toast = maak('button', 'gl toast');
-  toast.type = 'button';
-  toast.setAttribute('aria-label', `${m.titel}, ${m.tekst}. Open de camera's`);
+function toonMelding(m: Melding, aantal = 1) {
+  if (staat.inst?.meldingen.popup === false || (!m.test && (staat.inst?.meldingen.pauzeTot ?? 0) > Date.now())) return;
+  const toast = maak('div', 'gl toast');
   const binnen = maak('div', 'gl-in');
   if (m.beeld) {
     const beeld = maak('img', 'toast-beeld');
@@ -848,29 +857,44 @@ function toonMelding(m: Melding) {
   const tekstDeel = maak('div', 'toast-tekst');
   const kop = maak('div', 'toast-kop');
   kop.append(maak('span', 'stip'), maak('strong', undefined, m.titel));
-  tekstDeel.append(kop, maak('span', 'muted klein', m.tekst));
+  tekstDeel.append(kop, maak('span', 'muted klein', aantal > 1 ? `${m.tekst} · ${aantal} nieuwe gebeurtenissen` : m.tekst));
   binnen.append(tekstDeel);
   toast.append(binnen);
-  $('toasts').append(toast);
+  $('toasts').replaceChildren(toast);
   const weg = () => {
     toast.classList.add('weg');
     setTimeout(() => toast.remove(), 220);
   };
   // Klikken opent het scherm met alle camera's.
-  toast.addEventListener('click', () => {
+  const open = maak('button', 'melding-open', 'Bekijk camera’s');
+  open.type = 'button';
+  open.addEventListener('click', () => {
     weg();
     staat.scherm = 'cameras';
     pasToe();
   });
-  setTimeout(weg, 12_000);
+  const sluiten = maak('button', 'icoon-knop melding-sluiten', '×');
+  sluiten.type = 'button';
+  sluiten.setAttribute('aria-label', 'Melding sluiten');
+  sluiten.addEventListener('click', weg);
+  tekstDeel.append(open);
+  binnen.append(sluiten);
+  setTimeout(weg, (staat.inst?.meldingen.duur ?? 8) * 1000);
 }
 async function laadMeldingen() {
   try {
+    const pauze = (staat.inst?.meldingen.pauzeTot ?? 0) > Date.now();
+    tekst($('meldingen-status'), pauze ? 'Meldingen gepauzeerd' : 'Meldingen');
+    $('meldingen-knop').classList.toggle('gepauzeerd', pauze);
+    $('meldingen-knop').setAttribute('aria-label', pauze ? 'Meldingen gepauzeerd. Open meldingsinstellingen' : 'Meldingsinstellingen openen');
     const antwoord = await fetch(`/api/meldingen${laatsteMelding == null ? '' : `?na=${laatsteMelding}`}`);
     if (!antwoord.ok) return;
     const data = (await antwoord.json()) as { laatste: number; meldingen: Melding[] };
     // De eerste keer alleen onthouden waar we zijn, anders komen oude meldingen opnieuw voorbij.
-    if (laatsteMelding != null && data.laatste >= laatsteMelding) data.meldingen.filter((m) => m.pc).slice(-3).forEach(toonMelding);
+    if (laatsteMelding != null && data.laatste >= laatsteMelding && document.visibilityState === 'visible') {
+      const nieuw = data.meldingen.filter((m) => m.popup ?? m.pc);
+      if (nieuw.length) toonMelding(nieuw[nieuw.length - 1], nieuw.length);
+    }
     laatsteMelding = data.laatste;
   } catch {
     // De server is even weg; de volgende ronde probeert het opnieuw.
@@ -1210,6 +1234,7 @@ function zetInst(inst: Instellingen, eerste = false) {
   tekenFavorieten();
   tekenScenes();
   tekenSfeer();
+  if (staat.overzicht) tekenOverzicht(staat.overzicht);
   if (eerste || !staat.apparaten) laadApparaten();
   if (!eerste) laadApps();
 }
@@ -1228,11 +1253,29 @@ function wanneer(iso: string) {
   return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
 }
 
+const lijstenOpen = new Set<string>();
+function lijstKnop(id: string, totaal: number, limiet: number) {
+  if (totaal <= limiet) return [];
+  const open = lijstenOpen.has(id);
+  const k = maak('button', 'lijst-meer', open ? 'Minder tonen' : `Toon nog ${totaal - limiet}`);
+  k.type = 'button';
+  k.setAttribute('aria-expanded', String(open));
+  k.setAttribute('aria-controls', id);
+  k.addEventListener('click', () => {
+    if (open) lijstenOpen.delete(id); else lijstenOpen.add(id);
+    if (staat.overzicht) tekenOverzicht(staat.overzicht);
+    $(id).querySelector<HTMLButtonElement>('.lijst-meer')?.focus();
+  });
+  return [k];
+}
 function tekenOverzicht(o: Overzicht) {
+  const agendaMax = staat.inst?.weergave.agendaAantal ?? 3;
+  const mailMax = staat.inst?.weergave.mailAantal ?? 3;
   tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
   $('agenda').replaceChildren(
     ...(o.agenda.length === 0 && !o.agendaFout ? [maak('p', 'muted klein', 'Niets meer vandaag.')] : []),
-    ...o.agenda.map((a) => {
+    ...(o.agendaFout ? [maak('p', 'muted klein', 'Je agenda is tijdelijk niet bereikbaar.')] : []),
+    ...o.agenda.slice(0, lijstenOpen.has('agenda') ? undefined : agendaMax).map((a) => {
       const rij = maak('div', 'afspraak');
       const blok = maak('div');
       if (a.kleur) blok.style.borderLeftColor = a.kleur;
@@ -1241,12 +1284,14 @@ function tekenOverzicht(o: Overzicht) {
       return rij;
     }),
   );
+  $('agenda').append(...lijstKnop('agenda', o.agenda.length, agendaMax));
   tekst($('morgen'), o.morgen ? `Morgen ${o.morgen}` : 'Morgen niets gepland');
   const aantal = o.mailAantal ?? o.mail.length;
   tekst($('mail-aantal'), o.mailFout ? 'niet bereikbaar' : aantalTekst(o));
   $('mail').replaceChildren(
     ...(o.mail.length === 0 && !o.mailFout ? [maak('p', 'muted klein', 'Geen belangrijke mail. Lekker rustig.')] : []),
-    ...o.mail.map((m) => {
+    ...(o.mailFout ? [maak('p', 'muted klein', 'Je mail is tijdelijk niet bereikbaar.')] : []),
+    ...o.mail.slice(0, lijstenOpen.has('mail') ? undefined : mailMax).map((m) => {
       const rij = maak(m.link ? 'a' : 'div', 'mailregel');
       if (m.link && rij instanceof HTMLAnchorElement) {
         rij.href = m.link;
@@ -1265,6 +1310,7 @@ function tekenOverzicht(o: Overzicht) {
       return rij;
     }),
   );
+  $('mail').append(...lijstKnop('mail', o.mail.length, mailMax));
 }
 
 async function laadOverzicht() {

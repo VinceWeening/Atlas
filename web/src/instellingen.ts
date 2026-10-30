@@ -5,6 +5,9 @@ type Scherm = 'thuis' | 'overzicht';
 export type Datum = { id: string; titel: string; datum: string; van: string | null };
 export type Meldingen = {
   pc: boolean;
+  popup: boolean;
+  duur: number;
+  pauzeTot: number;
   telefoon: boolean;
   toestel: string | null;
   soorten: string[];
@@ -29,6 +32,7 @@ export type Instellingen = {
   weg: { aan: boolean; allesUit: boolean; alleenWeg: boolean };
   vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
   assistent: { vragen: boolean; hardop: boolean; cloud: boolean; overMij: string };
+  weergave: { rustig: boolean; beweging: boolean; agendaAantal: number; mailAantal: number };
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -197,6 +201,39 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       return null;
     }
 
+    const rust = maak('section', 'inst-sectie');
+    rust.append(maak('h3', 'lbl', 'RUST EN OVERZICHT'), maak('p', 'muted klein', 'Kies hoeveel je in één oogopslag ziet. De rest blijft met één klik bereikbaar. Instellingen worden op de server bewaard, voor pc en telefoon.'));
+    const bewaarW = async (deel: Partial<Instellingen['weergave']>) => { inst = await bewaar({ weergave: deel }); };
+    rust.append(
+      schakelaarRij('Rustige vormgeving', inst.weergave.rustig, (aan) => bewaarW({ rustig: aan }), 'Minder gloed en details; meer ruimte tussen onderdelen'),
+      schakelaarRij('Animaties en automatisch draaien', inst.weergave.beweging, (aan) => bewaarW({ beweging: aan }), 'Uit: een stilstaand huis en directe overgangen. Je systeemvoorkeur voor minder beweging blijft leidend'),
+    );
+    for (const [sleutel, naam] of [['agendaAantal', 'Afspraken in één oogopslag'], ['mailAantal', 'Mails in één oogopslag']] as const) {
+      const rij = maak('div', 'lamp');
+      const keuze = maak('select', 'kamer-keuze');
+      keuze.setAttribute('aria-label', naam);
+      for (const n of [1, 3, 5]) keuze.append(Object.assign(maak('option', undefined, `${n} ${n === 1 ? 'regel' : 'regels'}`), { value: String(n) }));
+      keuze.value = String(inst.weergave[sleutel]);
+      keuze.addEventListener('change', async () => {
+        try { await bewaarW({ [sleutel]: Number(keuze.value) }); }
+        catch { keuze.value = String(inst.weergave[sleutel]); meldFout('Bewaren lukte niet'); }
+      });
+      rij.append(maak('div', 'lamp-info', naam), keuze);
+      rust.append(rij);
+    }
+    const basis = knop('Rustige basisindeling', 'knop zacht');
+    const basisStatus = maak('p', 'muted klein');
+    basisStatus.setAttribute('role', 'status');
+    basis.addEventListener('click', async () => {
+      basis.disabled = true;
+      try {
+        inst = await bewaar({ weergave: { rustig: true, beweging: false, agendaAantal: 3, mailAantal: 3 }, ingevouwen: [...new Set([...inst.ingevouwen, 'tijdlijn', 'energie', 'frigate', 'media', 'camera', 'favorieten'])] });
+        await teken();
+      } catch { basisStatus.textContent = 'Bewaren lukte niet. Probeer opnieuw.'; }
+      finally { basis.disabled = false; }
+    });
+    rust.append(basis, maak('p', 'muted klein', 'Vouwt camera, tijdlijn, energie, media en favorieten in op Overzicht. Alle blokken blijven afzonderlijk uit te vouwen en aan of uit te zetten.'), basisStatus);
+
     const blokken = maak('section', 'inst-sectie');
     blokken.append(
       maak('h3', 'lbl', 'BLOKKEN'),
@@ -206,7 +243,9 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       const raster = maak('div', 'inst-raster');
       for (const [id, naam, uitleg] of lijst)
         raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } })), uitleg));
-      blokken.append(maak('p', 'inst-label', groep), raster);
+      const details = maak('details', 'inst-details');
+      details.append(maak('summary', undefined, groep), raster);
+      blokken.append(details);
     }
 
     const standen = maak('section', 'inst-sectie');
@@ -368,7 +407,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     assistent.append(maak('p', 'muted klein', 'Over mij: wat de AI over je mag weten, zodat antwoorden beter passen.'), overMij, overMijOpslaan, overMijMelding);
 
     return {
-      scherm: [blokken, standen, start, assistent],
+      scherm: [rust, start, standen, assistent, blokken],
       data: [data, vertrek],
       meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw)), await tekenWeg(inst, (nieuw) => (inst = nieuw))],
       knoppen: [await tekenSnelkoppelingen(inst)],
@@ -479,10 +518,39 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     else if (!opties.frigate.bereikbaar) sectie.append(maak('p', 'klein warm', 'Frigate reageert niet. Klopt FRIGATE_URL, en staat poort 5000 open?'));
 
     sectie.append(
-      schakelaarRij('Op de pc', m().pc, (aan) => bewaarM({ pc: aan })),
+      schakelaarRij('Pop-ups in Atlas', m().popup, (aan) => bewaarM({ popup: aan }), 'Maximaal één tegelijk; de tijdlijn blijft beschikbaar als dit uit staat'),
+      schakelaarRij('Windows-meldingen', m().pc, (aan) => bewaarM({ pc: aan }), 'Via de geïnstalleerde Windows-app, ook als het venster dicht is'),
       schakelaarRij('Op de telefoon', m().telefoon, (aan) => bewaarM({ telefoon: aan })),
       periodeRij('Stille uren', 'Geen meldingen; wat er was staat ’s ochtends in Vandaag gezien', m().stil, (p) => bewaarM({ stil: p })),
     );
+
+    const pauze = maak('div', 'melding-pauze');
+    const pauzeStatus = maak('p', 'muted klein');
+    pauzeStatus.setAttribute('role', 'status');
+    const tekenPauze = () => { pauzeStatus.textContent = m().pauzeTot > Date.now() ? `Gepauzeerd tot ${new Date(m().pauzeTot).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}. Gebeurtenissen blijven in Vandaag gezien staan.` : 'Meldingen niet gepauzeerd. Je kanaalkeuzes en stille uren blijven gelden.'; };
+    for (const [naam, minuten] of [['Pauzeer 1 uur', 60], ['Pauzeer 8 uur', 480], ['Hervatten', 0]] as const) {
+      const k = knop(naam, 'knop zacht');
+      k.addEventListener('click', async () => {
+        k.disabled = true;
+        try { await bewaarM({ pauzeTot: minuten ? Date.now() + minuten * 60_000 : 0 }); tekenPauze(); }
+        catch { meldFout('Bewaren lukte niet'); }
+        finally { k.disabled = false; }
+      });
+      pauze.append(k);
+    }
+    tekenPauze();
+    sectie.append(pauzeStatus, pauze);
+    const duurRij = maak('div', 'lamp');
+    const duur = maak('select', 'kamer-keuze');
+    duur.setAttribute('aria-label', 'Duur van een pop-up');
+    for (const seconden of [4, 8, 12]) duur.append(Object.assign(maak('option', undefined, `${seconden} seconden`), { value: String(seconden) }));
+    duur.value = String(m().duur);
+    duur.addEventListener('change', async () => {
+      try { await bewaarM({ duur: Number(duur.value) }); }
+      catch { duur.value = String(m().duur); meldFout('Bewaren lukte niet'); }
+    });
+    duurRij.append(maak('div', 'lamp-info', 'Duur van een pop-up'), duur);
+    sectie.append(duurRij);
 
     const toestelRij = maak('div', 'lamp');
     const keuze = maak('select', 'kamer-keuze');
@@ -569,6 +637,12 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     wachtRij.append(maak('div', 'lamp-info', 'Stilte per camera na een melding'), wacht);
     sectie.append(wachtRij);
 
+    const filters = maak('details', 'inst-details');
+    filters.append(maak('summary', undefined, 'Camera’s, personen en filters'));
+    const begin = [...sectie.children].findIndex((el) => el.classList.contains('inst-label') && el.textContent === 'Waarvoor');
+    if (begin >= 0) filters.append(...[...sectie.children].slice(begin));
+    sectie.append(filters);
+
     const test = knop('Testmelding', 'knop zacht');
     const melding = maak('p', 'klein muted');
     melding.setAttribute('role', 'status');
@@ -582,7 +656,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       }
       test.disabled = false;
     });
-    sectie.append(test, melding);
+    sectie.append(maak('p', 'muted klein', 'Een testmelding omzeilt je pauze en stille uren, maar respecteert je kanaalkeuzes.'), test, melding);
     return sectie;
   }
 
@@ -836,6 +910,11 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
   }
 
   document.getElementById('tandwiel')!.addEventListener('click', () => {
+    venster.showModal();
+    teken();
+  });
+  document.getElementById('meldingen-knop')!.addEventListener('click', () => {
+    tab = 'meldingen';
     venster.showModal();
     teken();
   });

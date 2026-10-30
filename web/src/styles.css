@@ -1057,3 +1057,41 @@ input::placeholder, textarea::placeholder { color: var(--zacht); opacity: 1; }
 @media (max-width: 600px) {
   .balk-rechts:has(#indelen-knop:not([hidden])) .voorbeeld-chip { display: none; }
 }
+
+/* Rustige basis: dezelfde Atlas-identiteit, met details pas wanneer je ze nodig hebt. */
+.app.rustig { --gat: 28px; --r-paneel: 22px; }
+.app.rustig .lucht { opacity: .12; }
+.app.rustig.huis-achter .huis { opacity: .045; filter: blur(3px) saturate(.3); }
+.app.rustig .gl { box-shadow: 0 10px 35px -22px rgba(0,0,0,.65); background: rgba(168,216,255,.17); }
+.app.rustig .gl-in { background: linear-gradient(150deg, rgba(22,29,39,.96), rgba(13,19,27,.95)); box-shadow: none; }
+.app.rustig .gl::after { display: none; }
+.app.rustig .mail-stukje { display: none; }
+.app.rustig .kolom { gap: 24px; }
+.app.rustig .kolom-kop { font-size: 14px; letter-spacing: .02em; color: var(--tekst); padding: 0 4px 8px; border-bottom: 1px solid var(--rand); }
+.app.rustig .bovenbalk .hud { opacity: .8; }
+.app.zonder-beweging *, .app.zonder-beweging *::before, .app.zonder-beweging *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+.lijst-meer, .melding-open { align-self: flex-start; min-height: 36px; padding: 7px 12px; border: 1px solid var(--rand); border-radius: 9px; color: var(--ijs); background: var(--vlak-1); font: inherit; font-size: 12px; }
+.lijst-meer:hover, .melding-open:hover { background: var(--vlak-ijs); }
+.melding-status-knop { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px 12px; color: var(--gedempt); border: 1px solid var(--rand); border-radius: var(--r-pil); background: var(--vlak-1); font-size: 12px; }
+.melding-status-knop.gepauzeerd { color: var(--warm); background: var(--vlak-warm); }
+.melding-pauze { display: flex; flex-wrap: wrap; gap: 8px; }
+.melding-pauze .knop { font-size: 12px; padding-inline: 14px; }
+.inst-details { border: 1px solid var(--rand); border-radius: 14px; padding: 0 14px 14px; }
+.inst-details + .inst-details { margin-top: 10px; }
+.inst-details summary { cursor: pointer; padding: 15px 2px; font-size: 14px; font-weight: 500; }
+.inst-details:not([open]) { padding-bottom: 0; }
+.inst-details > .inst-raster { margin-top: 4px; }
+.inst-details > .lamp + .lamp { margin-top: 10px; }
+.inst-details > .inst-label { margin: 20px 0 10px; }
+.inst-details > .segment { margin-bottom: 12px; }
+.toast > .gl-in { position: relative; padding-right: 48px; }
+.melding-sluiten { position: absolute; top: 8px; right: 8px; font-size: 22px; }
+.toast-tekst .melding-open { margin-top: 8px; }
+@media (max-width: 1100px) { .melding-status-knop #meldingen-status { display: none; } }
+@media (max-width: 600px) {
+  .melding-status-knop { padding: 6px 9px; min-height: 32px; }
+  .app.rustig .kolom { gap: 18px; }
+  .inst-details { padding-inline: 10px; }
+}

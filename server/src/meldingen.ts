@@ -2,7 +2,8 @@
 // instellingen uit het tandwiel en stuurt het door: naar de telefoon via de Home Assistant-app, en naar de pc via
 // /api/meldingen, dat de Windows-app en de pagina zelf ophalen.
 import type { Toestel } from './ha.js';
-import { instellingen, nuIn } from './instellingen.js';
+import { instellingen } from './instellingen.js';
+import { meldingKanalen } from './meldbeleid.js';
 import { Dienst, controles } from './zoek.js';
 
 export type Melding = {
@@ -17,8 +18,10 @@ export type Melding = {
   beeld: string | null;
   /** Of de pc deze melding moet laten zien. */
   pc: boolean;
+  popup: boolean;
   /** Binnengekomen tijdens de stille uren: niet gemeld, wel in de tijdlijn. */
   stil?: boolean;
+  test?: boolean;
 };
 
 type Gebeurtenis = {
@@ -90,7 +93,11 @@ export class Meldingen {
   /** Meldingen na een bepaald volgnummer; zonder nummer de laatste tien. */
   sinds(na: number | null) {
     const meldingen = na == null ? this.lijst.slice(-10) : this.lijst.filter((m) => m.volg > na);
-    return { laatste: this.volg, meldingen };
+    return { laatste: this.volg, meldingen: meldingen.map((m) => {
+      const nu = meldingKanalen(instellingen(), this.isWeg(), !!m.test);
+      // Ook een melding die vlak vóór het pauzeren binnenkwam mag daarna niet alsnog op de pc verschijnen.
+      return { ...m, pc: m.pc && nu.pc, popup: m.popup && nu.popup };
+    }) };
   }
 
   /** De laatste opnames van wat er in Meldingen › Waarvoor aan staat (standaard personen), nieuwste eerst. */
@@ -279,17 +286,14 @@ export class Meldingen {
     });
   }
 
-  private async verstuur(m: Omit<Melding, 'volg' | 'pc'>, test = false) {
+  private async verstuur(m: Omit<Melding, 'volg' | 'pc' | 'popup'>, test = false) {
     const inst = instellingen().meldingen;
     // Tijdens de stille uren alleen onthouden; een testmelding gaat altijd door.
-    const stil = !test && nuIn(inst.stil);
-    this.lijst.push({ ...m, volg: ++this.volg, pc: inst.pc && !stil, stil });
+    const { stil, pc, popup, telefoon } = meldingKanalen(instellingen(), this.isWeg(), test);
+    this.lijst.push({ ...m, volg: ++this.volg, pc, popup, stil, ...(test ? { test: true } : {}) });
     if (this.lijst.length > 50) this.lijst.shift();
     if (stil) return null;
-    if (!inst.telefoon || !inst.toestel) return test ? 'De telefoon staat uit in het tandwiel.' : null;
-    // "Alleen als ik weg ben": iemand is thuis, dus niet naar de telefoon. Is het onbekend, dan wel, voor de zekerheid.
-    const weg = instellingen().weg;
-    if (!test && weg.aan && weg.alleenWeg && this.isWeg() === false) return null;
+    if (!telefoon || !inst.toestel) return test ? 'De telefoon staat uit in het tandwiel.' : null;
     try {
       await this.telefoon.melding(inst.toestel, m.titel, m.tekst);
       return test ? 'Ook naar je telefoon gestuurd.' : null;

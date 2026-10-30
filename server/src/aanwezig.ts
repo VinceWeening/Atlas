@@ -3,6 +3,7 @@
 // Atlas terug via de websocket van Home Assistant. Alles staat standaard uit (tandwiel › Meldingen › Thuis en weg).
 import type { HomeAssistant, Persoon } from './ha.js';
 import { instellingen } from './instellingen.js';
+import { meldingKanalen } from './meldbeleid.js';
 
 export const ACTIE_ALLES_UIT = 'ATLAS_ALLES_UIT';
 type Log = { info: (bericht: string) => void; warn: (bericht: unknown) => void };
@@ -46,7 +47,7 @@ export class Aanwezig {
 
   private async weggegaan() {
     const inst = instellingen();
-    if (!this.ha || !inst.weg.aan || !inst.weg.allesUit || !inst.meldingen.toestel) return;
+    if (!this.ha || !inst.weg.aan || !inst.weg.allesUit || !inst.meldingen.toestel || !meldingKanalen(inst, true).telefoon) return;
     const aan = await this.ha.lampenAan().catch(() => [] as string[]);
     if (!aan.length) return;
     await this.ha

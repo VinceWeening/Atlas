@@ -17,6 +17,11 @@ export function startGlans() {
   document.addEventListener(
     'pointermove',
     (e) => {
+      if (document.querySelector('.app.rustig, .app.zonder-beweging')) {
+        paneel?.classList.remove('glans');
+        paneel = null;
+        return;
+      }
       const nieuw = (e.target as HTMLElement).closest?.<HTMLElement>('.gl') ?? null;
       if (nieuw !== paneel) {
         paneel?.classList.remove('glans');

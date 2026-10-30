@@ -11,6 +11,9 @@ export type Datum = { id: string; titel: string; datum: string; van: string | nu
 export const SOORTEN = ['person', 'car', 'bicycle', 'motorcycle', 'dog', 'cat', 'bird', 'package'] as const;
 export type Meldingen = {
   pc: boolean;
+  popup: boolean;
+  duur: number;
+  pauzeTot: number;
   telefoon: boolean;
   /** notify-dienst van de Home Assistant-app, bijvoorbeeld mobile_app_iphone_vince. */
   toestel: string | null;
@@ -67,6 +70,7 @@ export type Instellingen = {
     /** Wat je zelf over jezelf vertelt, zodat de AI je beter kent. Blijft op de server, niet in de code. */
     overMij: string;
   };
+  weergave: { rustig: boolean; beweging: boolean; agendaAantal: number; mailAantal: number };
 };
 
 const standaard: Instellingen = {
@@ -75,6 +79,9 @@ const standaard: Instellingen = {
   belangrijk: [],
   meldingen: {
     pc: true,
+    popup: true,
+    duur: 8,
+    pauzeTot: 0,
     telefoon: false,
     toestel: null,
     soorten: ['person'],
@@ -91,13 +98,17 @@ const standaard: Instellingen = {
   weg: { aan: false, allesUit: true, alleenWeg: false },
   vertrek: { reistijd: 20, plekken: [] },
   assistent: { vragen: true, hardop: true, cloud: true, overMij: '' },
+  weergave: { rustig: true, beweging: false, agendaAantal: 3, mailAantal: 3 },
   ingevouwen: [],
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
 // Een blok dat later is toegevoegd, staat bij een oud bestand nog niet in de lijst.
 huidig.blokken = { ...standaard.blokken, ...huidig.blokken };
+const bewaardePopup = huidig.meldingen?.popup;
 huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
+// Voorheen regelde 'pc' ook de pagina. Behoud die keuze bij bestaande installaties.
+huidig.meldingen.popup = bewaardePopup ?? huidig.meldingen.pc;
 huidig.favorieten ??= [];
 huidig.snelkoppelingen ??= [];
 huidig.namen ??= {};
@@ -106,6 +117,7 @@ huidig.standen = { ...standaard.standen, ...huidig.standen };
 huidig.weg = { ...standaard.weg, ...huidig.weg };
 huidig.vertrek = { ...standaard.vertrek, ...huidig.vertrek };
 huidig.assistent = { ...standaard.assistent, ...huidig.assistent };
+huidig.weergave = { ...standaard.weergave, ...huidig.weergave };
 
 export const instellingen = () => huidig;
 
@@ -234,6 +246,18 @@ export function zetInstellingen(nieuw: unknown): string | null {
     const m = n.meldingen as Partial<Meldingen>;
     if (!m || typeof m !== 'object') return 'Ongeldige meldingen';
     const v = volgende.meldingen;
+    if (m.popup !== undefined) {
+      if (typeof m.popup !== 'boolean') return 'Ongeldige pop-upinstelling';
+      v.popup = m.popup;
+    }
+    if (m.duur !== undefined) {
+      if (![4, 8, 12].includes(m.duur)) return 'Kies 4, 8 of 12 seconden';
+      v.duur = m.duur;
+    }
+    if (m.pauzeTot !== undefined) {
+      if (!Number.isSafeInteger(m.pauzeTot) || m.pauzeTot < 0 || m.pauzeTot > Date.now() + 24 * 60 * 60_000) return 'Een meldingpauze duurt maximaal 24 uur';
+      v.pauzeTot = m.pauzeTot;
+    }
     if (m.pc !== undefined) {
       if (typeof m.pc !== 'boolean') return 'Ongeldige meldingen';
       v.pc = m.pc;
@@ -272,6 +296,21 @@ export function zetInstellingen(nieuw: unknown): string | null {
     if (m.wachttijd !== undefined) {
       if (typeof m.wachttijd !== 'number' || !Number.isInteger(m.wachttijd) || m.wachttijd < 0 || m.wachttijd > 60) return 'Ongeldige wachttijd';
       v.wachttijd = m.wachttijd;
+    }
+  }
+
+  if (n.weergave !== undefined) {
+    const w = n.weergave as Partial<Instellingen['weergave']> | null;
+    if (!w || typeof w !== 'object' || Array.isArray(w)) return 'Ongeldige weergave';
+    for (const sleutel of ['rustig', 'beweging'] as const) {
+      if (w[sleutel] === undefined) continue;
+      if (typeof w[sleutel] !== 'boolean') return 'Ongeldige weergave';
+      volgende.weergave[sleutel] = w[sleutel]!;
+    }
+    for (const sleutel of ['agendaAantal', 'mailAantal'] as const) {
+      if (w[sleutel] === undefined) continue;
+      if (![1, 3, 5].includes(w[sleutel]!)) return 'Kies 1, 3 of 5 regels';
+      volgende.weergave[sleutel] = w[sleutel]!;
     }
   }
 
