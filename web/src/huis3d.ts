@@ -37,6 +37,7 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
   besturing.maxDistance = 40;
   besturing.maxPolarAngle = 1.35;
   const rustig = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let bewegingAan = !rustig;
   besturing.autoRotate = !rustig;
   besturing.autoRotateSpeed = 0.35;
   // Na zelf draaien stopt het langzame ronddraaien.
@@ -139,7 +140,7 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
   let deel = 0.12;
   const naar = (nu: number, doel: number) => nu + (doel - nu) * deel;
   function stap(dt: number) {
-    deel = 1 - Math.exp(-dt / 110);
+    deel = bewegingAan ? 1 - Math.exp(-dt / 110) : 1;
     for (const g of groepen) {
       g.position.y = naar(g.position.y, g.userData.doelY ?? g.position.y);
       const zicht = naar(g.userData.zicht ?? 1, g.userData.doelZicht ?? 1);
@@ -219,6 +220,13 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
 
   return {
     zet,
+    beweging(aan: boolean) {
+      const veranderd = bewegingAan !== aan;
+      bewegingAan = aan && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      besturing.enableDamping = bewegingAan;
+      if (!bewegingAan) besturing.autoRotate = false;
+      else if (veranderd) besturing.autoRotate = true;
+    },
     start() {
       if (draait) return;
       draait = true;
