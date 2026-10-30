@@ -227,7 +227,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     basis.addEventListener('click', async () => {
       basis.disabled = true;
       try {
-        inst = await bewaar({ weergave: { rustig: true, beweging: false, agendaAantal: 3, mailAantal: 3 }, ingevouwen: [...new Set([...inst.ingevouwen, 'tijdlijn', 'energie', 'frigate', 'media', 'camera', 'favorieten'])] });
+        inst = await bewaar({ weergave: { rustig: true, agendaAantal: 3, mailAantal: 3 }, ingevouwen: [...new Set([...inst.ingevouwen, 'tijdlijn', 'energie', 'frigate', 'media', 'camera', 'favorieten'])] });
         await teken();
       } catch { basisStatus.textContent = 'Bewaren lukte niet. Probeer opnieuw.'; }
       finally { basis.disabled = false; }
