@@ -8,6 +8,8 @@ import { begroeting, startGlans } from './glans';
 import { tekenLucht } from './lucht';
 import { laadEnergie } from './energie';
 import { kanSpraak, startOpdracht } from './opdracht';
+import { maakIndelen } from './indelen';
+import { maakMediaBlok } from './media';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -144,6 +146,76 @@ function tekenHuis3d() {
     });
 }
 
+// Beweging bij het wisselen van verdieping. Grote verplaatsingen starten snel en remmen lang af (Material 3 "emphasized
+// decelerate"); wat weggaat versnelt juist en is korter. Elke verdieping vertrekt iets later dan de vorige, zodat het
+// huis als een stapel lagen beweegt in plaats van als één blok. Alles start vanaf waar het nu staat, dus snel achter
+// elkaar wisselen (scrollen, pijltjes) loopt vloeiend door in plaats van terug te springen.
+const BINNEN = 'cubic-bezier(0.05, 0.7, 0.1, 1)';
+const WEG = 'cubic-bezier(0.3, 0, 0.8, 0.15)';
+const rustig = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Waar het huis en elke verdieping nu staan, midden in een beweging ook. */
+function waarStaat(gebouw: HTMLElement) {
+  const lagen = new Map<string, { transform: string; opacity: string }>();
+  for (const vlak of gebouw.querySelectorAll<HTMLElement>('.laag')) {
+    const st = getComputedStyle(vlak);
+    lagen.set(vlak.dataset.laag!, { transform: st.transform, opacity: st.opacity });
+  }
+  return { transform: getComputedStyle(gebouw).transform, lagen };
+}
+
+/** 3D: het nieuwe huis begint waar het oude stond en beweegt dan naar zijn plek, laag voor laag. */
+function beweegStapel(gebouw: HTMLElement, vorig: ReturnType<typeof waarStaat>, focus: number) {
+  const doel = gebouw.style.transform;
+  const vlakken = [...gebouw.querySelectorAll<HTMLElement>('.laag')];
+  const doelen = vlakken.map((v) => v.style.transform);
+  gebouw.style.transition = 'none';
+  gebouw.style.transform = vorig.transform;
+  for (const v of vlakken) {
+    const oud = vorig.lagen.get(v.dataset.laag!);
+    v.style.transition = 'none';
+    if (oud) {
+      v.style.transform = oud.transform;
+      v.style.opacity = oud.opacity;
+    }
+  }
+  void gebouw.offsetWidth;
+  gebouw.style.transition = `transform 640ms ${BINNEN}`;
+  gebouw.style.transform = doel;
+  vlakken.forEach((v, i) => {
+    // De gekozen verdieping eerst, daarna de rest naar buiten toe, 40 ms per stap.
+    const stap = Math.abs(i - (focus >= 0 ? focus : 0)) * 40;
+    v.style.transition = `transform 640ms ${BINNEN} ${stap}ms, opacity 320ms var(--uit) ${stap}ms`;
+    v.style.transform = doelen[i];
+    v.style.opacity = '';
+  });
+}
+
+/** 2D: de oude verdieping gaat kort weg, de nieuwe komt binnen uit de richting waar hij in het huis zit. */
+function wisselPlat(oud: HTMLElement, nieuw: HTMLElement, omhoog: boolean) {
+  const huis = $('huis');
+  oud.style.pointerEvents = 'none';
+  oud.setAttribute('aria-hidden', 'true');
+  huis.append(oud);
+  const basis = 'scale(0.92)';
+  const afstand = rustig() ? 0 : 56;
+  // Naar boven: de nieuwe verdieping zakt van boven in beeld, de oude zakt weg naar onder. Naar beneden andersom.
+  oud.animate(
+    [
+      { opacity: 1, transform: basis },
+      { opacity: 0, transform: `${basis} translateY(${omhoog ? afstand * 0.6 : -afstand * 0.6}px)` },
+    ],
+    { duration: 180, easing: WEG, fill: 'forwards' },
+  ).finished.then(() => oud.remove(), () => oud.remove());
+  nieuw.animate(
+    [
+      { opacity: 0, transform: `${basis} translateY(${omhoog ? -afstand : afstand}px)` },
+      { opacity: 1, transform: basis },
+    ],
+    { duration: rustig() ? 200 : 520, delay: 60, easing: BINNEN, fill: 'backwards' },
+  );
+}
+
 function tekenHuis() {
   const huis = $('huis');
   if (staat.modus === 'vrij') return tekenHuis3d();
@@ -156,6 +228,11 @@ function tekenHuis() {
   const gestapeld = driedee;
   const focus = driedee && staat.verdieping !== 'alle' ? lagen.findIndex((l) => l.id === staat.verdieping) : -1;
 
+  // Wat er nu staat, zodat het nieuwe huis vanaf daar kan bewegen.
+  const oud = huis.querySelector<HTMLElement>('.gebouw:not([aria-hidden])');
+  const vorig = oud && driedee && !oud.classList.contains('plat') && !rustig() ? waarStaat(oud) : null;
+  const vorigePlat = oud?.classList.contains('plat') && !driedee ? oud.querySelector<HTMLElement>('.laag')?.dataset.laag : undefined;
+
   const gebouw = maak('div', 'gebouw' + (driedee ? '' : ' plat') + (focus >= 0 ? ' met-focus' : ''));
   gebouw.style.transform = !driedee
     ? 'scale(0.92)'
@@ -167,6 +244,7 @@ function tekenHuis() {
   for (const [i, laag] of lagen.entries()) {
     if (!gestapeld && getoond !== laag.id) continue;
     const vlak = maak('div', 'laag' + (focus < 0 ? '' : i === focus ? ' focus' : ' vervaagd'));
+    vlak.dataset.laag = laag.id;
     vlak.style.height = `${laag.hoogte}%`;
     // Verdiepingen boven de gekozen schuiven wat omhoog, zodat je van bovenaf goed in de gekozen verdieping kijkt.
     const z = gestapeld ? laag.z + (focus >= 0 && i > focus ? 90 : 0) : 0;
@@ -220,6 +298,11 @@ function tekenHuis() {
     gebouw.append(vlak);
   }
   huis.replaceChildren(gebouw);
+  if (vorig) beweegStapel(gebouw, vorig, focus);
+  else if (oud && vorigePlat && vorigePlat !== getoond) {
+    const index = (id: string) => lagen.findIndex((l) => l.id === id);
+    wisselPlat(oud, gebouw, index(getoond) > index(vorigePlat));
+  }
 }
 
 // Verdiepingen van boven naar beneden, zoals je ze in het huis ziet. Scrollen boven het huis loopt deze lijst af.
@@ -605,6 +688,32 @@ function zetBlokken(overzicht: boolean) {
 
 let wisselKlaar: ReturnType<typeof setTimeout> | undefined;
 
+/** Instellingen bewaren vanaf het scherm zelf (niet uit het tandwiel), en meteen toepassen. */
+async function bewaarInst(deel: Partial<Instellingen>) {
+  try {
+    const antwoord = await fetch('/api/instellingen', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(deel),
+    });
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    zetInst(await antwoord.json());
+  } catch (fout) {
+    console.error('Bewaren mislukt', fout);
+    meldFout('Bewaren lukte niet');
+  }
+}
+
+const indelen = maakIndelen({
+  ingevouwen: () => staat.inst?.ingevouwen ?? [],
+  blokAan: (id) => staat.inst?.blokken[id] !== false,
+  bewaar: bewaarInst,
+});
+const mediaBlok = maakMediaBlok($('media-blok'), $('media-lijst'));
+const laadMedia = () => {
+  if (staat.inst?.blokken.media !== false && staat.scherm === 'overzicht') void mediaBlok.laad();
+};
+
 // Schermen en blokken uit het tandwiel.
 function pasToe() {
   const blokken = staat.inst?.blokken ?? {};
@@ -626,6 +735,8 @@ function pasToe() {
   }
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
+  indelen.pasToe();
+  laadMedia();
   $('pagina-apparaten').hidden = staat.scherm !== 'apparaten';
   $('pagina-cameras').hidden = staat.scherm !== 'cameras';
   if (staat.scherm === 'apparaten') apparaten.laad();
@@ -1345,6 +1456,7 @@ laadVertrek();
 setInterval(() => document.visibilityState === 'visible' && laadVertrek(), 120_000);
 laadEnergie();
 setInterval(() => document.visibilityState === 'visible' && staat.inst?.blokken.energie !== false && laadEnergie(), 30_000);
+setInterval(() => document.visibilityState === 'visible' && laadMedia(), 5_000);
 // Als app op de telefoon: de schil bewaren voor snel openen. Werkt alleen via https (Tailscale) of localhost.
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 tekenAlles();

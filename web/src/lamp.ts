@@ -28,7 +28,7 @@ async function stuur(id: string, naam: string, opdracht: { helderheid?: number; 
   }
 }
 
-function schuif(opties: {
+export function schuif(opties: {
   klasse: string;
   label: string;
   min: number;

@@ -1,7 +1,7 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn', 'energie', 'opdracht', 'afval', 'vertrek'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn', 'energie', 'opdracht', 'afval', 'vertrek', 'media'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
 // De spraakbol doet pas iets in fase 3, dus die staat tot dan uit.
 const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads', 'spraak'];
@@ -54,6 +54,8 @@ export type Instellingen = {
   };
   /** Vertrekhulp: reistijd naar plekken in je agenda. */
   vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
+  /** Blokken en kolommen die op Overzicht zijn ingevouwen: dan staat alleen hun kop er. */
+  ingevouwen: string[];
   /** Spraak en de lokale AI. Werkt alleen als OLLAMA_URL of WHISPER_URL is ingesteld. */
   assistent: {
     /** Vrije vragen ("wat moet ik vandaag nog doen?") beantwoorden met de lokale AI. */
@@ -85,6 +87,7 @@ const standaard: Instellingen = {
   weg: { aan: false, allesUit: true, alleenWeg: false },
   vertrek: { reistijd: 20, plekken: [] },
   assistent: { vragen: true, hardop: true },
+  ingevouwen: [],
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
@@ -94,6 +97,7 @@ huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
 huidig.favorieten ??= [];
 huidig.snelkoppelingen ??= [];
 huidig.namen ??= {};
+huidig.ingevouwen ??= [];
 huidig.standen = { ...standaard.standen, ...huidig.standen };
 huidig.weg = { ...standaard.weg, ...huidig.weg };
 huidig.vertrek = { ...standaard.vertrek, ...huidig.vertrek };
@@ -156,6 +160,11 @@ export function zetInstellingen(nieuw: unknown): string | null {
     if (w === undefined) continue;
     if (!Array.isArray(w) || w.length > 30 || w.some((e) => typeof e !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(e))) return 'Ongeldige lijst met apparaten';
     volgende[lijst] = [...new Set(w as string[])];
+  }
+  if (n.ingevouwen !== undefined) {
+    const w = n.ingevouwen;
+    if (!Array.isArray(w) || w.length > 40 || w.some((e) => typeof e !== 'string' || !/^[a-z-]{1,30}$/.test(e))) return 'Ongeldige lijst met ingevouwen blokken';
+    volgende.ingevouwen = [...new Set(w as string[])];
   }
   if (n.namen !== undefined) {
     // Alleen de namen die meekomen veranderen; een lege naam haalt de eigen naam weg.

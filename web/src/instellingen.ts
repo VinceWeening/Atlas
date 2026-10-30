@@ -18,6 +18,7 @@ export type Meldingen = {
 export type Periode = { aan: boolean; van: string; tot: string };
 export type Instellingen = {
   blokken: Record<string, boolean>;
+  ingevouwen: string[];
   start: { breed: Scherm; smal: Scherm };
   belangrijk: Datum[];
   meldingen: Meldingen;
@@ -102,6 +103,7 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
   [
     'Overzicht: media en server',
     [
+      ['media', 'Speelt nu', 'Tv’s en speakers uit Home Assistant: afspelen, volume en bron'],
       ['jellyfin', 'Verder kijken', 'Wat je in Jellyfin aan het kijken bent'],
       ['downloads', 'Downloads', 'Sonarr en Radarr'],
       ['seerr', 'Aanvragen', 'Seerr: wat er wacht en wat er klaar is'],
@@ -565,6 +567,19 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
   }
 
   /** Wat Atlas allemaal vindt: groen is goed, warm is iets om naar te kijken, grijs staat uit. */
+  /** Hoe je de Windows-app naar een ander serveradres laat wijzen. Dat adres staat in de app zelf, niet op de server. */
+  function tekenServer() {
+    const sectie = maak('section', 'inst-sectie');
+    const adres = maak('code', 'inst-code', location.origin);
+    sectie.append(
+      maak('h3', 'lbl', 'SERVERADRES'),
+      maak('p', 'muted klein', 'Dit scherm komt van:'),
+      adres,
+      maak('p', 'muted klein', 'Andere server in de Windows-app: klik met rechts op het Atlas-icoon rechtsonder in de taakbalk (eventueel eerst op het pijltje ^) en kies Server-adres wijzigen. Vul het adres in, bijvoorbeeld http://zimaos:8790 (de Tailscale-naam van je server) of het IP-adres met :8790, en klik op Verbinden. Is de server niet bereikbaar, dan vraagt de app vanzelf om een adres.'),
+    );
+    return sectie;
+  }
+
   async function tekenStatus() {
     const sectie = maak('section', 'inst-sectie');
     const kop = maak('div', 'kop');
@@ -657,7 +672,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
       return;
     }
     const nieuw = versie.childElementCount > 2;
-    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [await tekenStatus(), google, ...(nieuw ? [] : [versie])] };
+    const panelen: Record<Tab, HTMLElement[]> = { ...delen, koppelingen: [await tekenStatus(), google, tekenServer(), ...(nieuw ? [] : [versie])] };
     const balk = maak('div', 'inst-tabs');
     balk.setAttribute('role', 'tablist');
     balk.setAttribute('aria-label', 'Onderdelen van de instellingen');
