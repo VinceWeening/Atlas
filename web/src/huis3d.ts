@@ -30,6 +30,8 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
   const besturing = new OrbitControls(camera, renderer.domElement);
   besturing.target.set(0, AFSTAND, 1);
   besturing.enableDamping = true;
+  // Na loslaten draait het huis nog even door en remt het zacht af, zoals op een telefoon.
+  besturing.dampingFactor = 0.07;
   besturing.enablePan = false;
   besturing.minDistance = 12;
   besturing.maxDistance = 40;
@@ -132,9 +134,12 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
     besturing.target.y = focus >= 0 ? focus * AFSTAND + 0.5 : AFSTAND;
   }
 
-  // Zachte overgangen: elke frame een stukje richting het doel.
-  const naar = (nu: number, doel: number) => nu + (doel - nu) * 0.12;
-  function stap() {
+  // Zachte overgangen: elke frame een stukje richting het doel, afhankelijk van de tijd sinds het vorige frame. Zo is het
+  // even snel op een 60 Hz- als op een 144 Hz-scherm, en remt het af zoals een ease-out (snel weg, rustig aankomen).
+  let deel = 0.12;
+  const naar = (nu: number, doel: number) => nu + (doel - nu) * deel;
+  function stap(dt: number) {
+    deel = 1 - Math.exp(-dt / 110);
     for (const g of groepen) {
       g.position.y = naar(g.position.y, g.userData.doelY ?? g.position.y);
       const zicht = naar(g.userData.zicht ?? 1, g.userData.doelZicht ?? 1);
@@ -200,10 +205,14 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
   kijker.observe(plek);
 
   let draait = false;
-  function lus() {
+  let vorige = 0;
+  function lus(tijd: number) {
     if (!draait) return;
+    // Na een pauze (tabblad weg) niet in één keer een grote sprong maken.
+    const dt = Math.min(64, vorige ? tijd - vorige : 16);
+    vorige = tijd;
     besturing.update();
-    stap();
+    stap(dt);
     renderer.render(scene, camera);
     requestAnimationFrame(lus);
   }
@@ -213,6 +222,7 @@ export function maakHuis3d(plek: HTMLElement, opties: Opties) {
     start() {
       if (draait) return;
       draait = true;
+      vorige = 0;
       maat();
       requestAnimationFrame(lus);
     },

@@ -622,7 +622,7 @@ function pasToe() {
     void (app as HTMLElement).offsetWidth;
     app.classList.add('wissel');
     clearTimeout(wisselKlaar);
-    wisselKlaar = setTimeout(() => app.classList.remove('wissel'), 1200);
+    wisselKlaar = setTimeout(() => app.classList.remove('wissel'), 700);
   }
   app.classList.toggle('overzicht', overzicht);
   app.classList.toggle('op-pagina', pagina);
@@ -743,7 +743,7 @@ function toonMelding(m: Melding) {
   $('toasts').append(toast);
   const weg = () => {
     toast.classList.add('weg');
-    setTimeout(() => toast.remove(), 400);
+    setTimeout(() => toast.remove(), 220);
   };
   // Klikken opent het scherm met alle camera's.
   toast.addEventListener('click', () => {

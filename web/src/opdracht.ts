@@ -62,6 +62,10 @@ export function startOpdracht(opties: Opties) {
   const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' | 'denkt' | 'ai' = 'gewoon') => {
     antwoord.textContent = tekst;
     antwoord.dataset.soort = soort;
+    // Opnieuw afspelen: het nieuwe antwoord komt zacht binnen, ook als het vorige er nog stond.
+    antwoord.classList.remove('nieuw');
+    void antwoord.offsetWidth;
+    antwoord.classList.add('nieuw');
     if (soort === 'ai') {
       // Klein erachter: dit kwam van de lokale AI, niet uit Home Assistant.
       const bron = document.createElement('span');
