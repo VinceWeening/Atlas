@@ -91,6 +91,7 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
       ['scenes', 'Knoppen onderin', 'Scènes of je eigen knoppen in het dock'],
       ['hud', 'Status bovenin', 'Temperatuur binnen, lampen aan en de voordeur'],
       ['tijdlijn', 'Vandaag gezien', 'Wie of wat de camera’s vandaag zagen, op Overzicht'],
+      ['energie', 'Energie en klimaat', 'Stroom, gas, zon en de temperatuur per ruimte, op Overzicht'],
     ],
   ],
   [
@@ -106,7 +107,8 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
     'Extra',
     [
       ['lucht', 'Lucht zoals buiten', 'Licht of donker met de zon en maan op hun echte plek'],
-      ['spraak', 'Spraakbol', 'Doet pas iets vanaf fase 3'],
+      ['opdracht', 'Opdrachtbalk', 'Ctrl+K of /: typ wat Atlas moet doen, zoals ‘woonkamer uit’'],
+      ['spraak', 'Spraakbol', 'Onderin: tik en spreek een opdracht in'],
       ['sneltoetsen', 'Sneltoetsen', '1 t/m 4 voor de schermen, pijltjes voor de verdiepingen'],
     ],
   ],

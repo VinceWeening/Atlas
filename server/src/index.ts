@@ -9,6 +9,7 @@ import { BEDIENBAAR, HomeAssistant, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
 import { Apps } from './apps.js';
+import { voerUit } from './opdracht.js';
 import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
@@ -201,6 +202,34 @@ app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id
   if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Apparaat niet gevonden' });
   await huis.bedien(id, request.body.aan);
   return { ok: true };
+});
+
+app.get('/api/energie', async (_request, reply) => {
+  try {
+    return await huis.energie();
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
+});
+
+// Een opdracht in gewone taal uit de opdrachtbalk of de spraakbol.
+app.post<{ Body: { tekst?: unknown } }>('/api/opdracht', async (request, reply) => {
+  const tekst = request.body?.tekst;
+  if (typeof tekst !== 'string' || tekst.length > 200) return reply.code(400).send({ fout: 'Geen opdracht' });
+  try {
+    return await voerUit(tekst, {
+      huis: async () => metEigenNamen(await huis.huis()),
+      apparaten: async () => metEigenNamen(await huis.apparaten()),
+      energie: () => huis.energie(),
+      lamp: (id, opdracht) => huis.lamp(id, opdracht),
+      bedien: (id, aan) => huis.bedien(id, aan),
+      scene: (id) => huis.scene(id),
+    });
+  } catch (fout) {
+    app.log.error(fout);
+    return reply.code(502).send({ fout: 'Home Assistant is niet bereikbaar' });
+  }
 });
 
 app.get('/api/huis', async (_request, reply) => {

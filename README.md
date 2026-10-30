@@ -118,6 +118,22 @@ Atlas staat dan op `https://<naam-van-je-server>.<jouw-tailnet>.ts.net`. Zet dat
 
 Alles is aan en uit te zetten in het tandwiel, en de tijden zijn aan te passen.
 
+## Energie en klimaat
+
+Het blok **Energie en klimaat** op Overzicht zoekt de meters zelf in Home Assistant: een P1-meter (DSMR of HomeWizard) voor stroom en teruglevering, de gasmeter, zonnepanelen (SolarEdge, omvormer) voor opwek, de eerste thermostaat (`climate.*`) en per ruimte de temperatuur en luchtvochtigheid. Het verbruik van vandaag is de meterstand nu min die om middernacht, uit de geschiedenis van Home Assistant. Slimme stekkers telt Atlas bewust niet mee als "het huis". Zonder meters of sensoren verdwijnt het blok vanzelf.
+
+## Opdrachtbalk en spraak
+
+Druk **Ctrl+K** of **/** (of tik op het sterretje rechtsboven) en typ wat Atlas moet doen:
+
+- `woonkamer uit`, `keuken aan`, `alle lampen uit`
+- `dim bureau naar 30%`, `bureau feller`
+- `filmavond` (een scène), `welterusten` (scène Slapen, of alle lampen uit)
+- `hoe warm is het in de keuken`, `welke lampen zijn aan`, `hoeveel stroom gebruiken we`
+- `ga naar camera's`
+
+Atlas begrijpt een vaste set zinnen (geen AI) en bedient alleen lampen, schakelaars en scènes; sloten nooit. Met het blok **Spraakbol** aan tik je op de bol onderin en spreek je de opdracht in; het antwoord komt dan ook hardop. Dat gebruikt de spraakherkenning van de browser (Chrome, Edge, Safari op de iPhone). Werkt die niet, dan typ je. Spraak die helemaal thuis blijft komt met de lokale AI.
+
 ## Het tandwiel
 
 Het tandwiel heeft tabbladen: Scherm, Data, Meldingen, Knoppen en Koppelingen.

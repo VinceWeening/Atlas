@@ -52,6 +52,7 @@
       <div class="balk-rechts">
         <div class="hud" id="hud" data-blok="hud" aria-label="Status van het huis"></div>
         <button type="button" class="rond-knop" id="huis-knop" aria-pressed="false" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></button>
+        <button type="button" class="rond-knop" id="opdracht-knop" data-blok="opdracht" aria-label="Opdracht geven" aria-keyshortcuts="Control+K" title="Opdracht geven (Ctrl+K)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M19 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></button>
         <button type="button" class="rond-knop" id="tandwiel" aria-label="Instellingen"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       </div>
     </div></header>
@@ -110,8 +111,8 @@
     <!-- Onderin: de spraakbol (alleen als die aan staat) en één dock met favorieten en knoppen. -->
     <div class="midden-onder" id="plek-dock">
       <div class="spraak" data-blok="spraak">
-        <button type="button" class="orb" aria-label="Spraak, komt in fase 3" disabled></button>
-        <span class="lbl zacht">"Hey Atlas" · fase 3</span>
+        <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in"></button>
+        <span class="lbl zacht" id="spraak-label">Tik en spreek</span>
       </div>
       <div class="gl pil dock" id="dock"><div class="gl-in segment dock-in">
         <div class="dock-deel" id="dock-favorieten" data-blok="favorieten"></div>
@@ -127,6 +128,13 @@
         <section class="gl" aria-label="Vandaag aan de deur" data-blok="tijdlijn" id="tijdlijn-blok"><div class="gl-in paneel">
           <div class="kop"><h2 class="lbl">Vandaag gezien</h2><span class="mono muted klein" id="tijdlijn-aantal"></span></div>
           <ol class="tijdlijn" id="tijdlijn"></ol>
+        </div></section>
+        <section class="gl leeg" aria-label="Energie en klimaat" data-blok="energie" id="energie-blok"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Energie en klimaat</h2><span class="mono muted klein" id="energie-bron"></span></div>
+          <div class="energie-nu" id="energie-nu"></div>
+          <dl class="energie-vandaag" id="energie-vandaag"></dl>
+          <div class="thermostaat" id="thermostaat" hidden></div>
+          <ul class="klimaat" id="klimaat"></ul>
         </div></section>
         <section class="gl" aria-label="Favorieten" data-blok="favorieten" id="favorieten-blok"><div class="gl-in paneel">
           <div class="kop"><h2 class="lbl">Favorieten</h2></div>
@@ -190,6 +198,17 @@
   <dialog class="gl instellingen" id="instellingen" aria-labelledby="instellingen-titel"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="instellingen-titel">Instellingen</h2><button type="button" class="knop zacht" id="instellingen-sluit">Sluiten</button></div>
     <div id="instellingen-inhoud"></div>
+  </div></dialog>
+
+  <!-- Opdrachtbalk: typ of zeg wat Atlas moet doen. Ctrl+K of / opent hem, de spraakbol ook. -->
+  <dialog class="gl opdracht" id="opdracht" aria-label="Opdracht geven"><div class="gl-in">
+    <form class="opdracht-vorm" id="opdracht-vorm" method="dialog">
+      <svg class="opdracht-teken" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/></svg>
+      <input class="opdracht-veld" id="opdracht-veld" type="text" autocomplete="off" enterkeyhint="go" maxlength="200" placeholder="Wat moet Atlas doen?" aria-label="Opdracht">
+      <button type="button" class="rond-knop opdracht-mic" id="opdracht-mic" aria-label="Inspreken" aria-pressed="false" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></button>
+    </form>
+    <p class="opdracht-antwoord" id="opdracht-antwoord" aria-live="polite"></p>
+    <div class="opdracht-tips" id="opdracht-tips"></div>
   </div></dialog>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>

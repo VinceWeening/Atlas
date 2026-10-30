@@ -1,7 +1,7 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn', 'energie', 'opdracht'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
 // De spraakbol doet pas iets in fase 3, dus die staat tot dan uit.
 const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads', 'spraak'];

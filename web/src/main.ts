@@ -6,6 +6,8 @@ import { maakApparaten, maakCameras } from './paginas';
 import { meldFout, post } from './melding';
 import { begroeting, startGlans } from './glans';
 import { tekenLucht } from './lucht';
+import { laadEnergie } from './energie';
+import { kanSpraak, startOpdracht } from './opdracht';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -536,7 +538,7 @@ const THUIS: [string, string[]][] = [
 ];
 const OVERZICHT: [string, string[]][] = [
   ['kolom-dag', ['dagstart', 'vandaag', 'belangrijk', 'mail']],
-  ['kolom-huis', ['camera', 'tijdlijn', 'kamer', 'favorieten', 'dock']],
+  ['kolom-huis', ['camera', 'tijdlijn', 'energie', 'kamer', 'favorieten', 'dock']],
 ];
 function zetBlokken(overzicht: boolean) {
   const blok = (id: string) => (id === 'dock' ? $('dock') : document.querySelector<HTMLElement>(`.stage [data-blok="${id}"]:not(.dock-deel)`)!);
@@ -1184,6 +1186,31 @@ $('huis-knop').addEventListener('click', () => {
   pasToe();
 });
 
+// Opdrachtbalk (Ctrl+K of /) en de spraakbol, die hem opent en meteen luistert.
+const opdracht = startOpdracht({
+  aan: () => staat.inst?.blokken.opdracht !== false,
+  naarScherm: (scherm) => {
+    staat.scherm = scherm;
+    staat.huisVoor = false;
+    pasToe();
+  },
+  ververs: () => void laadHuis(),
+  tips: () => {
+    const h = staat.huis;
+    const kamer = h?.kamers.find((k) => k.lampen.length);
+    const tips = [];
+    if (kamer) tips.push(`${kamer.naam} ${kamer.lampen.some((l) => l.aan) ? 'uit' : 'aan'}`);
+    const dimbaar = h?.kamers.find((k) => k.lampen.some((l) => l.dimbaar));
+    if (dimbaar) tips.push(`Dim ${dimbaar.naam.toLowerCase()} naar 30%`);
+    if (h?.scenes[0]) tips.push(h.scenes[0].naam);
+    tips.push('Welke lampen zijn aan?', 'Hoe warm is het?');
+    return tips;
+  },
+});
+$('opdracht-knop').addEventListener('click', () => opdracht.open());
+$('spraak-orb').addEventListener('click', () => opdracht.open(true));
+tekst($('spraak-label'), kanSpraak ? 'Tik en spreek' : 'Tik en typ');
+
 startGlans();
 instellingen({ google: laadOverzicht, opgeslagen: (inst) => zetInst(inst) });
 pasToe();
@@ -1203,6 +1230,8 @@ setInterval(tikKlok, 1000);
 setInterval(tekenSfeer, 60_000);
 laadTijdlijn();
 setInterval(() => document.visibilityState === 'visible' && laadTijdlijn(), 60_000);
+laadEnergie();
+setInterval(() => document.visibilityState === 'visible' && staat.inst?.blokken.energie !== false && laadEnergie(), 30_000);
 // Als app op de telefoon: de schil bewaren voor snel openen. Werkt alleen via https (Tailscale) of localhost.
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 tekenAlles();

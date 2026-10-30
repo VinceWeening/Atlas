@@ -1,3 +1,4 @@
+import type { Energie } from './energie.js';
 import type { Apparaat, Apparaten, CameraOptie, Huis, Lamp } from './ha.js';
 
 // Voorbeeldgegevens. Agenda en mail blijven voorbeeld tot de Google-koppeling er is;
@@ -48,6 +49,21 @@ export class VoorbeeldHuis {
 
   async huis() {
     return this.staat;
+  }
+
+  async energie(): Promise<Energie> {
+    // Een gewone dag: 's ochtends en 's avonds meer verbruik, rond het middaguur zon op het dak.
+    const nu = new Date();
+    const uur = nu.getHours() + nu.getMinutes() / 60;
+    const zon = Math.max(0, Math.sin(((uur - 8) / 10) * Math.PI)) * 1400;
+    const lampen = this.alleLampen().filter((l) => l.aan).length * 12;
+    return {
+      bron: 'voorbeeld',
+      vermogen: Math.round(260 + lampen + (uur > 17 && uur < 20 ? 900 : 0) - zon),
+      vandaag: { stroom: Math.round(uur * 0.31 * 100) / 100, terug: Math.round(Math.max(0, uur - 11) * 0.42 * 100) / 100, gas: Math.round(uur * 0.08 * 100) / 100, opwek: Math.round(Math.max(0, Math.min(uur, 18) - 8) * 0.55 * 100) / 100 },
+      thermostaat: { id: 'climate.woonkamer', naam: 'Thermostaat', huidig: 20.5, doel: 20.5, stand: 'Rust' },
+      kamers: this.staat.kamers.map((k, i) => ({ id: k.id, naam: k.naam, temperatuur: k.temperatuur, vocht: [52, 61, 48, 55][i % 4] })),
+    };
   }
 
   async toestellen() {

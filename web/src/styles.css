@@ -771,3 +771,65 @@ dialog[open]::backdrop { animation: achter 420ms ease; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
 }
+
+/* Energie en klimaat: één groot getal voor nu, daaronder vandaag, de thermostaat en per ruimte het klimaat. */
+.energie-nu { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.energie-getal { font-size: var(--t-klok); font-weight: 200; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.energie-eenheid { font-size: var(--t-tekst); color: var(--gedempt); margin-right: 6px; }
+.energie-nu.terug .energie-getal { color: var(--ijs-licht); }
+.energie-vandaag { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+.energie-stat { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--r-rij); background: var(--vlak-1); }
+.energie-stat dt { margin: 0; }
+.energie-stat dd { margin: 0; font-size: var(--t-klein); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.thermostaat { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rand); }
+.thermostaat-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.thermostaat-tekst strong { font-weight: 500; font-size: var(--t-tekst); }
+.thermostaat-graden { font-size: var(--t-tekst); font-variant-numeric: tabular-nums; }
+.thermostaat.warm .thermostaat-tekst .muted { color: var(--warm); }
+.klimaat { list-style: none; margin: 10px 0 0; padding: 0; }
+.klimaat-rij { display: grid; grid-template-columns: minmax(0, 1fr) 56px 44px; gap: 8px; align-items: center; min-height: 36px; font-size: var(--t-klein); }
+.klimaat-rij + .klimaat-rij { border-top: 1px solid var(--rand); }
+.klimaat-naam { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.klimaat-rij .mono { text-align: right; font-variant-numeric: tabular-nums; }
+.klimaat-rij .vochtig { color: var(--ijs); }
+.klimaat-rij .vochtig::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ijs); vertical-align: middle; }
+
+/* Opdrachtbalk: een glazen balk bovenin het scherm, zoals Spotlight. */
+.opdracht {
+  width: min(640px, calc(100vw - 32px)); margin: 14vh auto auto; padding: 0; border: 0; color: var(--tekst); overflow: visible;
+}
+.opdracht::backdrop { background: rgba(4, 6, 10, 0.45); backdrop-filter: blur(4px); }
+.opdracht > .gl-in { padding: 10px; }
+.opdracht-vorm { display: flex; align-items: center; gap: 10px; padding: 0 4px 0 14px; }
+.opdracht-teken { flex: none; color: var(--ijs); }
+.opdracht-veld {
+  flex: 1; min-width: 0; height: 52px; border: 0; outline: 0; background: none; color: var(--tekst);
+  font: inherit; font-size: 19px; font-weight: 300; letter-spacing: -0.01em;
+}
+.opdracht-veld::placeholder { color: var(--zacht); }
+.opdracht-mic[aria-pressed="true"] { background: var(--vlak-ijs); color: var(--ijs-licht); box-shadow: 0 0 0 6px rgba(168, 216, 255, 0.12); animation: adem 1.6s ease-in-out infinite; }
+.opdracht-antwoord { margin: 0; padding: 0 18px; font-size: var(--t-tekst); color: var(--gedempt); }
+.opdracht-antwoord:empty { display: none; }
+.opdracht-antwoord:not(:empty) { padding: 12px 18px 6px; border-top: 1px solid var(--rand); }
+.opdracht-antwoord[data-soort="gedaan"] { color: var(--tekst); }
+.opdracht-antwoord[data-soort="gedaan"]::before { content: '✓'; margin-right: 10px; color: var(--ijs); }
+.opdracht-antwoord[data-soort="fout"]::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%; background: var(--warm); vertical-align: middle; }
+.opdracht-antwoord[data-soort="luistert"] { color: var(--ijs-licht); }
+.opdracht-tips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 4px; }
+.opdracht-tips:empty { display: none; }
+.opdracht-tip {
+  min-height: 32px; padding: 0 12px; border: 1px solid var(--rand); border-radius: var(--r-pil); background: var(--vlak-1);
+  color: var(--gedempt); font: inherit; font-size: 12px; transition: background 200ms ease, color 200ms ease;
+}
+.opdracht-tip:hover { background: var(--vlak-2); color: var(--tekst); }
+.opdracht[aria-busy="true"] .opdracht-teken { animation: adem 1s ease-in-out infinite; }
+.orb { cursor: pointer; }
+.orb:focus-visible { outline: 2px solid var(--ijs-licht); outline-offset: 6px; }
+@media (max-width: 700px) {
+  .energie-vandaag { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opdracht { margin-top: max(12px, env(safe-area-inset-top)); }
+  .opdracht-veld { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opdracht-mic[aria-pressed="true"], .opdracht[aria-busy="true"] .opdracht-teken { animation: none; }
+}

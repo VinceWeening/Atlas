@@ -1,3 +1,5 @@
+import { type Energie, energieUit, kiesMeters, middernacht } from './energie.js';
+
 // Koppeling met Home Assistant via de REST-API. Atlas vraagt zelf op welke ruimtes, lampen, camera's en scènes er zijn,
 // dus er hoeft niets per lamp ingesteld te worden.
 
@@ -222,6 +224,8 @@ const weerNamen: Record<string, string> = {
 
 export class HomeAssistant {
   private ruimtes: { tijd: number; lijst: Ruimte[] } | null = null;
+  /** Meterstanden om middernacht, één keer per dag opgehaald. */
+  private begin: { dag: number; standen: Record<string, number> } | null = null;
 
   constructor(private readonly instellingen: HaInstellingen) {}
 
@@ -315,6 +319,38 @@ export class HomeAssistant {
     const binnen = binnenTemps.length ? Math.round((binnenTemps.reduce((a, b) => a + b, 0) / binnenTemps.length) * 10) / 10 : null;
 
     return { bron: 'home-assistant', kamers, losseLampen, cameras, scenes, weer, binnen };
+  }
+
+  /** Stroom, gas, opwek en het klimaat per ruimte. */
+  async energie(): Promise<Energie> {
+    const [toestanden, ruimtes] = await Promise.all([
+      this.vraag('/api/states').then((a) => a.json() as Promise<Toestand[]>),
+      this.haalRuimtes().catch(() => [] as Ruimte[]),
+    ]);
+    const meters = kiesMeters(toestanden);
+    const ids = [...meters.stroom, ...meters.terug, ...meters.gas, ...meters.opwek];
+    return energieUit(toestanden, ruimtes, meters, await this.standenOmMiddernacht(ids).catch(() => ({})));
+  }
+
+  /** De stand van elke meter om middernacht, uit de geschiedenis van Home Assistant. */
+  private async standenOmMiddernacht(ids: string[]) {
+    const begin = middernacht();
+    const nieuw = ids.filter((id) => this.begin?.dag !== begin.getTime() || !(id in this.begin.standen));
+    if (this.begin?.dag !== begin.getTime()) this.begin = { dag: begin.getTime(), standen: {} };
+    if (nieuw.length) {
+      // Alleen de eerste minuut na middernacht: de eerste waarde is dan de stand op het begin van de dag.
+      const tot = new Date(begin.getTime() + 60_000).toISOString();
+      const pad = `/api/history/period/${begin.toISOString()}?end_time=${encodeURIComponent(tot)}&filter_entity_id=${nieuw.join(',')}&minimal_response&no_attributes`;
+      const reeksen = (await (await this.vraag(pad)).json()) as { entity_id?: string; state: string }[][];
+      reeksen.forEach((reeks, i) => {
+        const id = reeks[0]?.entity_id ?? nieuw[i];
+        const n = Number(reeks.find((r) => Number.isFinite(Number(r.state)) && r.state !== '')?.state);
+        if (Number.isFinite(n)) this.begin!.standen[id] = n;
+      });
+      // Geen geschiedenis van een meter: niet elke minuut opnieuw vragen. NaN betekent "onbekend vandaag".
+      for (const id of nieuw) if (!(id in this.begin!.standen)) this.begin!.standen[id] = NaN;
+    }
+    return this.begin!.standen;
   }
 
   /** Alles uit Home Assistant dat ertoe doet, per ruimte. */
