@@ -134,19 +134,23 @@ Druk **Ctrl+K** of **/** (of tik op het sterretje rechtsboven) en typ wat Atlas 
 
 Atlas begrijpt een vaste set zinnen (geen AI) en bedient alleen lampen, schakelaars en scènes; sloten nooit. Met het blok **Spraakbol** aan tik je op de bol onderin en spreek je de opdracht in; het antwoord komt dan ook hardop. Dat gebruikt de spraakherkenning van de browser (Chrome, Edge, Safari op de iPhone). Werkt die niet, dan typ je.
 
-### Spraak die thuis blijft (Whisper)
+### Spraak en lokale AI op je eigen server
 
-De Windows-app heeft geen spraakherkenning van de browser. Met een eigen Whisper-server werkt spraak overal, en blijft je stem thuis:
+Met een eigen Whisper (spraak naar tekst) en Ollama (lokale AI) werkt spraak ook in de Windows-app, blijft je stem thuis, en kun je Atlas gewone vragen stellen. Beide staan klaar in `docker-compose.ai.yml`, als aparte app naast Atlas:
 
-1. Haal in `docker-compose.yml` de `#` weg bij de dienst `whisper` en bij `whisper-modellen`, en installeer opnieuw.
-2. Laat de server het model één keer downloaden: `curl -X POST http://<server>:8000/v1/models/Systran/faster-whisper-small` (zie de documentatie van Speaches als dat niet werkt).
-3. Zet bij Atlas `WHISPER_URL` op `http://host.docker.internal:8000` en start Atlas opnieuw.
+1. ZimaOS: App Store › Eigen app installeren › `docker-compose.ai.yml` importeren. Dat zijn twee containers, `atlas-ollama` en `atlas-whisper`, met een geheugengrens van 3 GB en 1,5 GB.
+2. Zet bij Atlas `WHISPER_URL` op `http://host.docker.internal:8000` en `OLLAMA_URL` op `http://host.docker.internal:11434`, en start Atlas opnieuw.
+3. Atlas haalt de modellen de eerste keer zelf op (samen ruim 2 GB). Tandwiel › Koppelingen laat zien of dat nog bezig is.
 
-Daarna neemt de spraakbol op tot je even stil bent, stuurt de opname naar Whisper en voert de opdracht uit. Elke server die `/v1/audio/transcriptions` kent werkt.
+Kijk bij Tandwiel › Koppelingen › **Ruimte voor spraak en AI** of het past: Atlas meet het vrije geheugen en de schijf van de server en zegt welk model erin past. Past `qwen2.5:3b` niet, zet dan `OLLAMA_MODEL` op `qwen2.5:1.5b`. Na tien minuten zonder vragen geeft Ollama het geheugen weer vrij. Uitzetten kan altijd: stop de app `atlas-ai`, of zet in het tandwiel bij **Spraak en AI** de vragen of het hardop antwoorden uit.
 
-### Lokale AI als hulp (Ollama)
+Wat het dan doet:
 
-Zet `OLLAMA_URL` naar een eigen Ollama (bijvoorbeeld op de pc of later de Mac mini) en eventueel `OLLAMA_MODEL` (standaard `qwen2.5:3b`). Snapt de opdrachtbalk een zin niet, zoals "maak het donker in de woonkamer", dan herschrijft het model hem naar een zin die Atlas wel kent ("woonkamer uit") en zie je dat erbij staan. Het model bedient zelf niets: alleen de vaste zinnen doen iets in huis.
+- **Spreken**: Ctrl+Spatie of de spraakbol. Atlas neemt op tot je even stil bent, Whisper maakt er tekst van, en de opdracht wordt uitgevoerd. Elke server die `/v1/audio/transcriptions` kent werkt.
+- **Onbekende zinnen**: "maak het donker in de woonkamer" herschrijft het model naar een zin die Atlas kent ("woonkamer uit"), en dat zie je erbij staan.
+- **Vragen**: "wat staat er vandaag nog?", "moet ik een jas aan?", "wanneer moet ik weg?". Het model krijgt een kort overzicht van je agenda, belangrijke mail, het weer, de lampen, energie, afval en wie er thuis is, en antwoordt in een of twee zinnen. Er staat "lokale AI" achter, zodat je weet waar het vandaan komt.
+
+Het model bedient zelf nooit iets: alleen de vaste zinnen doen iets in huis, en sloten en camera's nooit.
 
 ## Het draaibare 3D-huis
 
@@ -154,7 +158,7 @@ Kies naast het huis **Draai** voor een echt 3D-model (three.js): slepen draait, 
 
 ## Controleren wat werkt
 
-Tandwiel › Koppelingen › **Wat Atlas vindt** laat per onderdeel zien of het werkt: Home Assistant (met het aantal ruimtes en lampen), personen, energiemeters, afval, Frigate, meldingen, Google, Whisper, Buienradar en Ollama. Een warme stip is iets om naar te kijken, grijs staat uit.
+Tandwiel › Koppelingen › **Wat Atlas vindt** laat per onderdeel zien of het werkt: Home Assistant (met het aantal ruimtes en lampen), personen, energiemeters, afval, Frigate, meldingen, Google, Whisper, Buienradar, Ollama en of er genoeg geheugen en schijf is voor spraak en AI. Een warme stip is iets om naar te kijken, grijs staat uit.
 
 ## Thuis en weg, vertrekhulp en afval
 

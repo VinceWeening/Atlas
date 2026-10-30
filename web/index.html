@@ -114,7 +114,7 @@
     <!-- Onderin: de spraakbol (alleen als die aan staat) en één dock met favorieten en knoppen. -->
     <div class="midden-onder" id="plek-dock">
       <div class="spraak" data-blok="spraak">
-        <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in"></button>
+        <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in" aria-keyshortcuts="Control+Space" title="Spreken (Ctrl+Spatie)"></button>
         <span class="lbl zacht" id="spraak-label">Tik en spreek</span>
       </div>
       <div class="gl pil dock" id="dock"><div class="gl-in segment dock-in">
@@ -203,7 +203,7 @@
     <div id="instellingen-inhoud"></div>
   </div></dialog>
 
-  <!-- Opdrachtbalk: typ of zeg wat Atlas moet doen. Ctrl+K of / opent hem, de spraakbol ook. -->
+  <!-- Opdrachtbalk: typ of zeg wat Atlas moet doen. Ctrl+K of / opent hem, de spraakbol ook; Ctrl+Spatie begint meteen met luisteren. -->
   <dialog class="gl opdracht" id="opdracht" aria-label="Opdracht geven"><div class="gl-in">
     <form class="opdracht-vorm" id="opdracht-vorm" method="dialog">
       <svg class="opdracht-teken" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/></svg>

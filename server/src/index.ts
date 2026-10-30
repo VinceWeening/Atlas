@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { Google } from './google.js';
+import { Google, type Afspraak } from './google.js';
 import { BEDIENBAAR, HomeAssistant, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
@@ -13,8 +13,9 @@ import { voerUit } from './opdracht.js';
 import { Aanwezig } from './aanwezig.js';
 import { regen, volgendeVertrek } from './vertrek.js';
 import { middernacht } from './energie.js';
-import { naarTekst, spraakAan, spraakBereikbaar } from './spraak.js';
-import { aiBereikbaar, herschrijf } from './ai.js';
+import { naarTekst, spraakAan, spraakBereikbaar, spraakModel, zorgVoorSpraakModel } from './spraak.js';
+import { aiAan, aiBereikbaar, aiGeladen, aiModel, aiModelStaat, beantwoord, herschrijf, zorgVoorModel } from './ai.js';
+import { ruimte } from './ruimte.js';
 import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
 
@@ -223,20 +224,63 @@ app.get('/api/energie', async (_request, reply) => {
 });
 
 // Vertrekhulp: wanneer weg voor de volgende afspraak, en of het regent.
-app.get('/api/vertrek', async () => {
-  let afspraken = voorbeeld.agenda.map((a) => {
+async function afsprakenVandaag() {
+  if (google?.gekoppeld) return (await google.afspraken().catch(() => ({ vandaag: [] as Afspraak[], morgen: '' }))).vandaag;
+  return voorbeeld.agenda.map((a): Afspraak => {
     // In het voorbeeld: de afspraken staan vandaag op hun tijd, en Sporten is een plek.
     const [u, m] = a.tijd.split(':').map(Number);
     const begin = new Date(middernacht().getTime() + (u * 60 + m) * 60_000);
     return { ...a, kleur: null, begin: begin.toISOString(), plek: a.titel === 'Sporten' ? 'Sportschool Heiloo' : undefined };
   });
-  if (google?.gekoppeld) afspraken = (await google.afspraken().catch(() => ({ vandaag: [] }))).vandaag as typeof afspraken;
-  return { vertrek: volgendeVertrek(afspraken), regen: await regen() };
-});
+}
+app.get('/api/vertrek', async () => ({ vertrek: volgendeVertrek(await afsprakenVandaag()), regen: await regen() }));
+
+/** Een kort overzicht van wat Atlas nu weet, voor de lokale AI bij een vrije vraag. Alleen wat er op de schermen ook staat. */
+async function watAtlasWeet() {
+  const [h, e, afval, afspraken, post, buien] = await Promise.allSettled([
+    huis.huis().then(metEigenNamen),
+    huis.energie(),
+    huis.afval(),
+    afsprakenVandaag(),
+    google?.gekoppeld ? google.mail() : Promise.resolve({ mail: voorbeeld.mail, aantal: voorbeeld.mail.length }),
+    regen(),
+  ]);
+  const regels = [`Nu: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.`];
+  if (afspraken.status === 'fulfilled') {
+    const a = afspraken.value;
+    regels.push(a.length ? `Agenda vandaag: ${a.map((x) => `${x.tijd} ${x.titel}${x.plek ? ` (${x.plek.split(',')[0]})` : ''}`).join('; ')}.` : 'Agenda vandaag: niets.');
+    const v = volgendeVertrek(a);
+    if (v) regels.push(`Vertrekken voor ${v.titel} om ${new Date(v.om).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })} (${v.reistijd} minuten reizen).`);
+  }
+  if (post.status === 'fulfilled') {
+    const p = post.value;
+    regels.push(`Belangrijke mail: ${p.aantal}${p.mail.length ? `, waaronder ${p.mail.slice(0, 5).map((m) => `"${m.onderwerp}" van ${m.van}`).join('; ')}` : ''}.`);
+  }
+  if (h.status === 'fulfilled') {
+    const x = h.value;
+    if (x.weer) regels.push(`Weer: ${x.weer.omschrijving}${x.weer.temperatuur != null ? `, ${x.weer.temperatuur} graden buiten` : ''}.`);
+    const aan = [...x.kamers.flatMap((k) => k.lampen.filter((l) => l.aan).map((l) => `${l.naam} (${k.naam})`)), ...x.losseLampen.filter((l) => l.aan).map((l) => l.naam)];
+    regels.push(`Lampen aan: ${aan.length ? aan.join(', ') : 'geen'}.`);
+    const warm = x.kamers.filter((k) => k.temperatuur != null).map((k) => `${k.naam} ${k.temperatuur} graden`);
+    if (warm.length) regels.push(`Temperatuur binnen: ${warm.join(', ')}.`);
+    if (x.scenes.length) regels.push(`Scènes: ${x.scenes.map((s) => s.naam).join(', ')}.`);
+  }
+  if (buien.status === 'fulfilled' && buien.value) regels.push(`Regen: ${buien.value.tekst}.`);
+  if (e.status === 'fulfilled') {
+    const v = e.value;
+    const delen = [v.vermogen != null && `nu ${v.vermogen} watt`, v.vandaag.stroom != null && `vandaag ${v.vandaag.stroom} kWh stroom`, v.vandaag.gas != null && `${v.vandaag.gas} m3 gas`, v.thermostaat && `thermostaat ${v.thermostaat.stand}, doel ${v.thermostaat.doel ?? '?'} graden`].filter(Boolean);
+    if (delen.length) regels.push(`Energie: ${delen.join(', ')}.`);
+  }
+  if (afval.status === 'fulfilled' && afval.value.length) regels.push(`Afval: ${afval.value.slice(0, 3).map((a) => `${a.naam} op ${a.datum}`).join(', ')}.`);
+  const p = aanwezig.personen;
+  if (p.length) regels.push(`Personen: ${p.map((x) => `${x.naam} ${x.thuis ? 'thuis' : 'weg'}`).join(', ')}.`);
+  return regels.join('\n');
+}
 
 // Opnames voor de eigen Whisper-server komen binnen als ruwe audio, hooguit 5 MB (ruim een minuut).
 app.addContentTypeParser(/^audio\//, { parseAs: 'buffer', bodyLimit: 5 * 1024 * 1024 }, (_request, body, klaar) => klaar(null, body));
-app.get('/api/spraak', async () => ({ aan: spraakAan() }));
+// aan: spraak via de eigen Whisper-server; vragen: de lokale AI beantwoordt vrije vragen.
+app.get('/api/spraak', async () => ({ aan: spraakAan(), vragen: aiAan() && instellingen().assistent.vragen }));
 app.post('/api/spraak', async (request, reply) => {
   if (!spraakAan()) return reply.code(404).send({ fout: 'Spraak op de server staat niet aan' });
   const type = String(request.headers['content-type'] ?? '');
@@ -253,7 +297,7 @@ app.post('/api/spraak', async (request, reply) => {
 type Controle = { naam: string; staat: 'goed' | 'let-op' | 'uit'; tekst: string };
 app.get('/api/status', async () => {
   const inst = instellingen();
-  const [h, e, a, frigate, spraak, buien, ai] = await Promise.allSettled([
+  const [h, e, a, frigate, spraak, buien, ai, geladen] = await Promise.allSettled([
     huis.huis(),
     huis.energie(),
     huis.afval(),
@@ -261,6 +305,7 @@ app.get('/api/status', async () => {
     spraakBereikbaar(),
     regen(),
     aiBereikbaar(),
+    aiGeladen(),
   ]);
   const lijst: Controle[] = [];
   const echt = !!ha;
@@ -317,7 +362,7 @@ app.get('/api/status', async () => {
     spraakOk === null
       ? { naam: 'Spraak (Whisper)', staat: 'uit', tekst: 'Geen WHISPER_URL: spraak via de browser, niet in de Windows-app.' }
       : spraakOk
-        ? { naam: 'Spraak (Whisper)', staat: 'goed', tekst: 'Bereikbaar' }
+        ? { naam: 'Spraak (Whisper)', staat: 'goed', tekst: `Bereikbaar, model ${spraakModel.split('/').at(-1)}` }
         : { naam: 'Spraak (Whisper)', staat: 'let-op', tekst: 'WHISPER_URL ingesteld, maar de server antwoordt niet.' },
   );
   lijst.push(
@@ -330,10 +375,19 @@ app.get('/api/status', async () => {
     aiOk === null
       ? { naam: 'Lokale AI (Ollama)', staat: 'uit', tekst: 'Geen OLLAMA_URL: de opdrachtbalk kent alleen vaste zinnen.' }
       : aiOk
-        ? { naam: 'Lokale AI (Ollama)', staat: 'goed', tekst: 'Helpt bij zinnen die de opdrachtbalk niet kent' }
+        ? aiModelStaat() === 'bezig'
+          ? { naam: 'Lokale AI (Ollama)', staat: 'let-op', tekst: `Model ${aiModel} wordt opgehaald; dat kan een kwartier duren.` }
+          : aiModelStaat() === 'mislukt'
+            ? { naam: 'Lokale AI (Ollama)', staat: 'let-op', tekst: `Model ${aiModel} ophalen lukte niet. Klopt OLLAMA_MODEL?` }
+            : { naam: 'Lokale AI (Ollama)', staat: 'goed', tekst: `${aiModel}: helpt bij onbekende zinnen${inst.assistent.vragen ? ' en beantwoordt vragen' : ''}` }
         : { naam: 'Lokale AI (Ollama)', staat: 'let-op', tekst: 'OLLAMA_URL ingesteld, maar Ollama antwoordt niet.' },
   );
-  return { lijst };
+  // Of spraak en AI passen in het geheugen en op de schijf van de server.
+  const r = await ruimte(geladen.status === 'fulfilled' ? geladen.value : 0);
+  lijst.push({ naam: 'Ruimte voor spraak en AI', staat: r.advies.past ? 'goed' : 'let-op', tekst: r.advies.tekst });
+  // Nog geen model? Dan opnieuw proberen op te halen (doet niets als het er al is).
+  if (aiOk && aiModelStaat() !== 'klaar') void zorgVoorModel(app.log);
+  return { lijst, ruimte: r };
 });
 
 app.get('/api/aanwezig', async () => aanwezig.status());
@@ -360,6 +414,7 @@ app.post<{ Body: { tekst?: unknown } }>('/api/opdracht', async (request, reply) 
       bedien: (id, aan) => huis.bedien(id, aan),
       scene: (id) => huis.scene(id),
       hulp: herschrijf,
+      vraag: aiAan() && instellingen().assistent.vragen ? async (zin) => beantwoord(zin, await watAtlasWeet()) : undefined,
     });
   } catch (fout) {
     app.log.error(fout);
@@ -452,3 +507,11 @@ if (existsSync(webDir)) {
 }
 
 await app.listen({ host: '0.0.0.0', port });
+
+// Spraak en AI: ontbreekt een model nog, dan haalt Atlas het zelf op. Op de achtergrond, en elk uur opnieuw kijken.
+const modellen = () => {
+  void zorgVoorSpraakModel(app.log);
+  void zorgVoorModel(app.log);
+};
+modellen();
+setInterval(modellen, 60 * 60_000).unref();

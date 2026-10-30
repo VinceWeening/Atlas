@@ -1,0 +1,43 @@
+# Spraak en lokale AI voor Atlas, als aparte app naast Atlas. Voor ZimaOS: App Store › Eigen app installeren › dit
+# bestand importeren. Zet daarna in de Atlas-app:
+#   WHISPER_URL: "http://host.docker.internal:8000"
+#   OLLAMA_URL:  "http://host.docker.internal:11434"
+# Atlas haalt de modellen de eerste keer zelf op (een paar GB, dat duurt even). Uitzetten = deze app stoppen; Atlas valt
+# dan terug op de spraak van de browser en de vaste zinnen.
+#
+# Geheugen: samen hooguit ongeveer 4,5 GB, en alleen als je net iets vroeg. Na tien minuten stilte geeft Ollama het
+# geheugen weer vrij. Op een server met 8 GB waar ook Home Assistant en Frigate draaien: kijk eerst bij Atlas › tandwiel ›
+# Controle › "Ruimte voor spraak en AI" welk model past. Past qwen2.5:3b niet, zet dan OLLAMA_MODEL op qwen2.5:1.5b.
+name: atlas-ai
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: atlas-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-modellen:/root/.ollama
+    environment:
+      # Eén model tegelijk, één vraag tegelijk, en na tien minuten zonder vragen het geheugen vrijgeven.
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_KEEP_ALIVE: "10m"
+      OLLAMA_CONTEXT_LENGTH: "2048"
+    # Bovengrens, zodat de AI nooit Home Assistant of Frigate verdringt. 3 GB is genoeg voor qwen2.5:3b.
+    mem_limit: 3g
+
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: atlas-whisper
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - whisper-modellen:/home/ubuntu/.cache/huggingface/hub
+    # Whisper small heeft rond 1 GB nodig tijdens het luisteren.
+    mem_limit: 1536m
+
+volumes:
+  ollama-modellen:
+  whisper-modellen:

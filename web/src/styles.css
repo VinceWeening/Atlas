@@ -815,6 +815,11 @@ dialog[open]::backdrop { animation: achter 420ms ease; }
 .opdracht-antwoord[data-soort="gedaan"]::before { content: '✓'; margin-right: 10px; color: var(--ijs); }
 .opdracht-antwoord[data-soort="fout"]::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%; background: var(--warm); vertical-align: middle; }
 .opdracht-antwoord[data-soort="luistert"] { color: var(--ijs-licht); }
+.opdracht-antwoord[data-soort="denkt"] { color: var(--gedempt); animation: denkt 1.4s ease-in-out infinite; }
+@keyframes denkt { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .opdracht-antwoord[data-soort="denkt"] { animation: none; } }
+.opdracht-antwoord[data-soort="ai"] { color: var(--tekst); }
+.opdracht-bron { margin-left: 10px; color: var(--zacht); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
 .opdracht-tips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 4px; }
 .opdracht-tips:empty { display: none; }
 .opdracht-tip {

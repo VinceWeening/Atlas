@@ -27,6 +27,7 @@ export type Instellingen = {
   standen: { ochtend: Periode; avond: Periode };
   weg: { aan: boolean; allesUit: boolean; alleenWeg: boolean };
   vertrek: { reistijd: number; plekken: { naam: string; minuten: number }[] };
+  assistent: { vragen: boolean; hardop: boolean };
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -328,8 +329,24 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     });
     vertrek.append(reistijdRij, plekken, vertrekOpslaan, vertrekMelding);
 
+    // Spraak en de lokale AI: twee schakelaars. Of Whisper en Ollama er zijn, staat bij Controle.
+    const assistent = maak('section', 'inst-sectie');
+    assistent.append(
+      maak('h3', 'lbl', 'SPRAAK EN AI'),
+      maak('p', 'muted klein', 'Ctrl+Spatie of de spraakbol: meteen spreken. De lokale AI draait op je eigen server en bedient zelf niets; hij helpt alleen zinnen begrijpen en beantwoordt vragen met wat Atlas weet.'),
+    );
+    const lokaalA = { ...inst.assistent };
+    const bewaarA = async (deel: Partial<Instellingen['assistent']>) => {
+      Object.assign(lokaalA, deel);
+      inst = await bewaar({ assistent: deel });
+    };
+    assistent.append(
+      schakelaarRij('Vragen beantwoorden', lokaalA.vragen, (aan) => bewaarA({ vragen: aan }), 'Zoals “wat staat er vandaag nog?”; alleen met OLLAMA_URL'),
+      schakelaarRij('Antwoorden hardop', lokaalA.hardop, (aan) => bewaarA({ hardop: aan }), 'Alleen als je iets zei, niet als je typte'),
+    );
+
     return {
-      scherm: [blokken, standen, start],
+      scherm: [blokken, standen, start, assistent],
       data: [data, vertrek],
       meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw)), await tekenWeg(inst, (nieuw) => (inst = nieuw))],
       knoppen: [await tekenSnelkoppelingen(inst)],

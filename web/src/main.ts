@@ -1301,6 +1301,7 @@ const opdracht = startOpdracht({
     tips.push('Welke lampen zijn aan?', 'Hoe warm is het?');
     return tips;
   },
+  hardop: () => staat.inst?.assistent?.hardop !== false,
 });
 $('opdracht-knop').addEventListener('click', () => opdracht.open());
 $('spraak-orb').addEventListener('click', () => opdracht.open(true));

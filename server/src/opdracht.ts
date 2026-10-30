@@ -13,6 +13,8 @@ export type Antwoord = {
   scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras';
   /** Als de lokale AI de zin herschreef: wat Atlas ervan maakte. */
   begrepen?: string;
+  /** Of het antwoord van de lokale AI komt (een vrije vraag), zodat de app dat kan laten zien. */
+  ai?: boolean;
 };
 
 export type Bron = {
@@ -24,6 +26,8 @@ export type Bron = {
   scene(id: string): Promise<void>;
   /** Optioneel: lokale AI die een onbekende zin herschrijft naar een zin die Atlas kent. */
   hulp?: (zin: string, namen: { ruimtes: string[]; apparaten: string[]; scenes: string[] }) => Promise<string | null>;
+  /** Optioneel: lokale AI die een vrije vraag beantwoordt met wat Atlas weet. Bedient zelf niets. */
+  vraag?: (zin: string) => Promise<string | null>;
 };
 
 /** Kleine letters, zonder accenten en leestekens, zodat "Camera's" en "cameras" hetzelfde zijn. */
@@ -137,11 +141,19 @@ export async function voerUit(invoer: string, bron: Bron): Promise<Antwoord> {
   const kamer = huis.kamers.map((k) => ({ k, score: past(k.naam, z) })).filter((x) => x.score && x.k.lampen.length).sort((a, b) => b.score - a.score)[0];
 
   // Lokale AI aan: laat het model een onduidelijke zin herschrijven, en probeer die één keer. Zelf bedient het model niets.
+  // Is het eerder een vraag dan een opdracht, dan krijgt het model hem als vraag; met wat Atlas weet antwoordt het kort.
+  const isVraag = /\?\s*$/.test(invoer) || /^(wat|wie|wanneer|waar|waarom|hoe|hoeveel|welke|welk|moet|heb|hebben|is|zijn|kan|kun|zal|wordt|komt|gaat|regent|vertel)\b/.test(zin);
   const metHulp = async (anders: Antwoord): Promise<Antwoord> => {
-    const nieuw = await bron.hulp?.(invoer, { ruimtes: huis.kamers.map((k) => k.naam), apparaten: bedienbaar.map((a) => a.naam), scenes: huis.scenes.map((s) => s.naam) });
-    if (!nieuw || gewoon(nieuw) === gewoon(invoer)) return anders;
-    const tweede = await voerUit(nieuw, { ...bron, hulp: undefined });
-    return tweede.tekst.startsWith('Dat snap ik nog niet') ? anders : { ...tweede, begrepen: nieuw };
+    if (!isVraag) {
+      const nieuw = await bron.hulp?.(invoer, { ruimtes: huis.kamers.map((k) => k.naam), apparaten: bedienbaar.map((a) => a.naam), scenes: huis.scenes.map((s) => s.naam) });
+      if (nieuw && gewoon(nieuw) !== gewoon(invoer)) {
+        const tweede = await voerUit(nieuw, { ...bron, hulp: undefined, vraag: undefined });
+        if (!tweede.tekst.startsWith('Dat snap ik nog niet')) return { ...tweede, begrepen: nieuw };
+      }
+    }
+    if (!bron.vraag || (!isVraag && !anders.tekst.startsWith('Dat snap ik nog niet'))) return anders;
+    const antwoord = await bron.vraag(invoer.trim());
+    return antwoord ? { tekst: antwoord, gedaan: false, ai: true } : anders;
   };
   if (!apparaat && !kamer) return metHulp({ tekst: `Dat snap ik nog niet. ${VOORBEELD}`, gedaan: false });
   if (!aan && !uit) return metHulp({ tekst: `${(apparaat && (!kamer || apparaat.score > kamer.score) ? apparaat.a.naam : kamer!.k.naam)}: aan of uit?`, gedaan: false });
