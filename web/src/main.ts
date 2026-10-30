@@ -5,6 +5,7 @@ import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { maakApparaten, maakCameras } from './paginas';
 import { meldFout, post } from './melding';
 import { begroeting, startGlans } from './glans';
+import { tekenLucht } from './lucht';
 
 type Overzicht = {
   voorbeeld: boolean;
@@ -524,17 +525,18 @@ function tekenAlles() {
   tekenCamera();
   tekenWeer();
   tekenOpmerking();
+  if (staat.inst) tekenStand();
 }
 
 // Waar de blokken staan. Op Thuis staan ze rond het huis; op Overzicht in drie kolommen die elk op hun eigen hoogte
 // stapelen, zodat er geen gaten vallen.
 const THUIS: [string, string[]][] = [
-  ['plek-links', ['vandaag', 'belangrijk', 'mail']],
+  ['plek-links', ['dagstart', 'vandaag', 'belangrijk', 'mail']],
   ['plek-rechts', ['kamer', 'camera']],
 ];
 const OVERZICHT: [string, string[]][] = [
-  ['kolom-dag', ['vandaag', 'belangrijk', 'mail']],
-  ['kolom-huis', ['camera', 'kamer', 'favorieten', 'dock']],
+  ['kolom-dag', ['dagstart', 'vandaag', 'belangrijk', 'mail']],
+  ['kolom-huis', ['camera', 'tijdlijn', 'kamer', 'favorieten', 'dock']],
 ];
 function zetBlokken(overzicht: boolean) {
   const blok = (id: string) => (id === 'dock' ? $('dock') : document.querySelector<HTMLElement>(`.stage [data-blok="${id}"]:not(.dock-deel)`)!);
@@ -654,7 +656,7 @@ function tekenBelangrijk() {
 }
 
 // Meldingen van Frigate in beeld, zolang de pagina open staat. De Windows-app laat ze ook zien als het venster verstopt is.
-type Melding = { volg: number; titel: string; tekst: string; beeld: string | null };
+type Melding = { volg: number; titel: string; tekst: string; beeld: string | null; pc: boolean };
 let laatsteMelding: number | null = null;
 function toonMelding(m: Melding) {
   const toast = maak('button', 'gl toast');
@@ -693,7 +695,7 @@ async function laadMeldingen() {
     if (!antwoord.ok) return;
     const data = (await antwoord.json()) as { laatste: number; meldingen: Melding[] };
     // De eerste keer alleen onthouden waar we zijn, anders komen oude meldingen opnieuw voorbij.
-    if (laatsteMelding != null && data.laatste >= laatsteMelding) data.meldingen.slice(-3).forEach(toonMelding);
+    if (laatsteMelding != null && data.laatste >= laatsteMelding) data.meldingen.filter((m) => m.pc).slice(-3).forEach(toonMelding);
     laatsteMelding = data.laatste;
   } catch {
     // De server is even weg; de volgende ronde probeert het opnieuw.
@@ -886,6 +888,96 @@ async function laadInstellingen() {
   }
 }
 
+// Ochtend- en avondstand. Buiten die uren gewoon Thuis en Overzicht zoals altijd.
+type Stand = 'ochtend' | 'avond' | null;
+function nuIn(p: { aan: boolean; van: string; tot: string }) {
+  if (!p.aan) return false;
+  const nu = new Date();
+  const tijd = nu.getHours() * 60 + nu.getMinutes();
+  const [van, tot] = [p.van, p.tot].map((t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3)));
+  return van <= tot ? tijd >= van && tijd < tot : tijd >= van || tijd < tot;
+}
+function huidigeStand(): Stand {
+  const st = staat.inst?.standen;
+  if (!st) return null;
+  return nuIn(st.ochtend) ? 'ochtend' : nuIn(st.avond) ? 'avond' : null;
+}
+
+/** De kaart bovenaan in de ochtend- of avondstand: een begroeting en in één zin wat er is. */
+function tekenStand() {
+  const stand = huidigeStand();
+  const app = document.querySelector('.app')!;
+  app.classList.toggle('stand-ochtend', stand === 'ochtend');
+  app.classList.toggle('stand-avond', stand === 'avond');
+  $('dagstart').hidden = !stand;
+  if (!stand) return;
+  const o = staat.overzicht;
+  const weer = staat.huis?.weer ?? o?.weer;
+  const weerTekst = weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '';
+  const datum = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  tekst($('dagstart-label'), stand === 'ochtend' ? `${datum}${weerTekst ? ` · ${weerTekst}` : ''}` : 'Avond');
+  tekst($('dagstart-titel'), begroeting());
+  let zin: string;
+  if (stand === 'ochtend') {
+    const n = o?.agenda.length ?? 0;
+    const eerste = o?.agenda[0];
+    const deadline = (staat.inst?.belangrijk ?? [])
+      .map((d) => ({ ...d, dagen: Math.round((middag(d.datum) - middag(new Date().toLocaleDateString('sv-SE'))) / dag) }))
+      .filter((d) => d.dagen >= 0 && !d.van)
+      .sort((a, b) => a.dagen - b.dagen)[0];
+    zin = n === 0 ? 'Vandaag staat er niets in je agenda.' : `${n === 1 ? 'Eén afspraak' : `${n} afspraken`} vandaag${eerste ? `, de eerste om ${eerste.tijd}: ${eerste.titel}` : ''}.`;
+    if (deadline && deadline.dagen <= 14) zin += ` ${deadline.titel} ${deadline.dagen === 0 ? 'is vandaag' : deadline.dagen === 1 ? 'is morgen' : `over ${deadline.dagen} dagen`}.`;
+  } else {
+    const lampen = staat.huis ? [...staat.huis.kamers.flatMap((k) => k.lampen), ...staat.huis.losseLampen] : [];
+    const aan = lampen.filter((l) => l.aan).length;
+    zin = `${o?.morgen ? `Morgen ${o.morgen}.` : 'Morgen staat er niets gepland.'} ${aan === 0 ? 'Alle lampen zijn uit.' : `${aan} ${aan === 1 ? 'lamp is' : 'lampen zijn'} nog aan.`}`;
+  }
+  tekst($('dagstart-tekst'), zin);
+}
+
+// Tijdlijn: wat de camera's vandaag zagen, ook tijdens de stille uren.
+type Gezien = { id: string; camera: string; titel: string; tijd: string; beeld: string; gemeld: boolean };
+function tekenTijdlijn(lijst: Gezien[] | null) {
+  for (const [id, aantal] of [['tijdlijn', 'tijdlijn-aantal'], ['tijdlijn-pagina-lijst', 'tijdlijn-pagina-aantal']] as const) {
+    const ol = $(id);
+    tekst($(aantal), lijst?.length ? `${lijst.length}×` : '');
+    ol.replaceChildren(
+      ...(lijst?.length
+        ? lijst.slice(0, id === 'tijdlijn' ? 5 : 30).map((g) => {
+            const li = maak('li', 'gezien');
+            const beeld = maak('img', 'gezien-beeld');
+            beeld.alt = '';
+            beeld.loading = 'lazy';
+            beeld.src = g.beeld;
+            beeld.addEventListener('error', () => (beeld.style.visibility = 'hidden'));
+            const tekstDeel = maak('div', 'gezien-tekst');
+            tekstDeel.append(maak('strong', undefined, g.titel), maak('span', 'muted klein', `${g.camera}${g.gemeld ? '' : ' · niet gemeld'}`));
+            li.append(maak('span', 'mono gezien-tijd', uur(g.tijd)), beeld, tekstDeel);
+            return li;
+          })
+        : [maak('p', 'muted klein', lijst ? 'Vandaag nog niets gezien.' : 'Frigate is niet gevonden.')]),
+    );
+  }
+  // Op Overzicht verdwijnt het blok als Frigate er niet is of er niets te zien is.
+  $('tijdlijn-blok').classList.toggle('leeg', !lijst?.length);
+  $('tijdlijn-pagina').classList.toggle('leeg', !lijst);
+}
+async function laadTijdlijn() {
+  try {
+    const antwoord = await fetch('/api/meldingen/vandaag');
+    if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
+    const data = (await antwoord.json()) as { frigate: boolean; lijst: Gezien[] };
+    tekenTijdlijn(data.frigate ? data.lijst : null);
+  } catch {
+    tekenTijdlijn(null);
+  }
+}
+
+function tekenSfeer() {
+  tekenLucht(document.querySelector<HTMLElement>('.app')!, staat.inst?.blokken.lucht !== false);
+  tekenStand();
+}
+
 function zetInst(inst: Instellingen, eerste = false) {
   // Het huis net uitgezet of weer aangezet: dan geldt de nieuwe stand meteen.
   if (inst.blokken.huis !== staat.inst?.blokken.huis) staat.huisVoor = false;
@@ -895,6 +987,7 @@ function zetInst(inst: Instellingen, eerste = false) {
   tekenBelangrijk();
   tekenFavorieten();
   tekenScenes();
+  tekenSfeer();
   if (eerste || !staat.apparaten) laadApparaten();
   if (!eerste) laadApps();
 }
@@ -958,6 +1051,7 @@ async function laadOverzicht() {
     if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
     staat.overzicht = await antwoord.json();
     tekenOverzicht(staat.overzicht!);
+    tekenStand();
     tekenWeer();
     tekenOpmerking();
   } catch (fout) {
@@ -1105,6 +1199,12 @@ setInterval(() => document.visibilityState === 'visible' && laadApps(), 30_000);
 setInterval(tekenBelangrijk, 3_600_000);
 tikKlok();
 setInterval(tikKlok, 1000);
+// Lucht, zon, maan en de standen veranderen per minuut.
+setInterval(tekenSfeer, 60_000);
+laadTijdlijn();
+setInterval(() => document.visibilityState === 'visible' && laadTijdlijn(), 60_000);
+// Als app op de telefoon: de schil bewaren voor snel openen. Werkt alleen via https (Tailscale) of localhost.
+if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 tekenAlles();
 laadOverzicht();
 setInterval(laadOverzicht, 60_000);

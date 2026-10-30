@@ -93,6 +93,31 @@ Atlas leest je agenda's en je belangrijke ongelezen mail, alleen lezen. Daarvoor
 
 Daarna kies je in het tandwiel welke agenda's Atlas laat zien. De koppeling staat in het volume `atlas-data`, dus een update van Atlas laat hem staan.
 
+## Atlas op je telefoon
+
+Atlas werkt op de telefoon als een gewone app, met een eigen icoon en zonder adresbalk.
+
+1. Zet Tailscale aan op je telefoon.
+2. Open Atlas in Safari (iPhone) of Chrome (Android) via de Tailscale-naam van je server, bijvoorbeeld `http://zimaos:8790`.
+3. iPhone: tik op Deel › **Zet op beginscherm**. Android: menu › **App installeren**.
+
+Voor de snelste versie, die ook opent als de verbinding even hapert, heeft de telefoon een `https://`-adres nodig. Dat kan met Tailscale zelf. Zet in de Tailscale-beheerpagina **HTTPS Certificates** aan (DNS › HTTPS) en draai dan eenmalig in de terminal van ZimaOS:
+
+```sh
+sudo tailscale serve --bg 8790
+```
+
+Atlas staat dan op `https://<naam-van-je-server>.<jouw-tailnet>.ts.net`. Zet dat adres op je beginscherm.
+
+## Ochtend, avond, lucht en stille uren
+
+- **Ochtendstand** (standaard 6:00 tot 10:00): een begroeting met je afspraken en de eerstvolgende deadline bovenaan.
+- **Avondstand** (standaard 21:00 tot 1:00): alleen nog de kamer, de camera en de knoppen, met wat er morgen is.
+- **Lucht zoals buiten**: de achtergrond is licht, schemerig of donker zoals het nu in Heiloo is, met de zon of de maan (in de juiste fase) op hun plek.
+- **Stille uren** (bij Meldingen, standaard uit): geen meldingen op pc of telefoon. Wat de camera's zagen, staat wel in **Vandaag gezien** op Overzicht en bij Camera's.
+
+Alles is aan en uit te zetten in het tandwiel, en de tijden zijn aan te passen.
+
 ## Het tandwiel
 
 Het tandwiel heeft tabbladen: Scherm, Data, Meldingen, Knoppen en Koppelingen.

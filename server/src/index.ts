@@ -135,6 +135,15 @@ app.get('/api/meldingen/opties', async () => {
   };
 });
 
+app.get('/api/meldingen/vandaag', async (_request, reply) => {
+  try {
+    return { frigate: meldingen.ingesteld, lijst: (await meldingen.vandaag()) ?? [] };
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Frigate is niet bereikbaar' });
+  }
+});
+
 app.post('/api/meldingen/test', async () => ({ telefoon: await meldingen.test() }));
 
 app.get<{ Params: { camera: string } }>('/api/meldingen/camera/:camera/beeld', async (request, reply) => {

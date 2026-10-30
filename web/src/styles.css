@@ -140,15 +140,13 @@ p, h1, h2, h3 { margin: 0; }
 
 .links, .rechts {
   grid-row: 2; align-self: stretch; display: flex; flex-direction: column; justify-content: safe center; gap: var(--gat); min-width: 0; min-height: 0;
-  pointer-events: auto; overflow-y: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px;
+  pointer-events: auto;
 }
-.links::-webkit-scrollbar, .rechts::-webkit-scrollbar { display: none; }
 .links { grid-column: 1; }
 .rechts { grid-column: 3; }
 /* Op Thuis alleen afzender en onderwerp van de twee nieuwste mails, zodat de linkerkolom op het scherm past. Alles staat op
    Overzicht. Past het toch niet, dan scrolt de kolom met een zachte rand. */
 .links .mail-stukje, .links .mailregel:nth-child(n+3) { display: none; }
-.links, .rechts { mask-image: linear-gradient(transparent, #000 16px, #000 calc(100% - 16px), transparent); }
 .midden-onder { grid-column: 1 / -1; grid-row: 3; justify-self: center; align-self: end; display: flex; flex-direction: column; align-items: center; gap: 14px; pointer-events: auto; min-width: 0; max-width: 100%; }
 
 /* Lijsten binnen een paneel: rijen met een dun lijntje ertussen in plaats van kaartjes in kaartjes. */
@@ -241,7 +239,7 @@ a.mailregel:hover strong { color: var(--ijs-licht); }
 
 /* Dock onderin: favorieten en knoppen samen, met een streepje ertussen. */
 .dock { max-width: 100%; }
-.dock-in { flex-wrap: nowrap; align-items: center; padding: 5px; overflow-x: auto; scrollbar-width: none; }
+.dock-in { flex-wrap: nowrap; justify-content: safe center; align-items: center; padding: 5px; overflow-x: auto; scrollbar-width: none; }
 .dock-in::-webkit-scrollbar { display: none; }
 .dock-deel { display: flex; gap: 4px; }
 .dock-deel:empty { display: none; }
@@ -687,6 +685,89 @@ dialog[open]::backdrop { animation: achter 420ms ease; }
 /* Dunne, rustige scrollbalken waar wel gescrold wordt. */
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+}
+
+/* ── Lucht zoals buiten ─────────────────────────────────────────────────────────────────────────────────────────── */
+/* Een laag achter alles met de kleur van de lucht nu; zon of maan op hun echte plek (links oost, rechts west). */
+.lucht { display: none; position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.app[data-lucht] .lucht {
+  display: block;
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,0.4) 100%),
+    radial-gradient(50% 45% at 50% 58%, rgba(23, 32, 48, 0.55) 0%, transparent 100%),
+    linear-gradient(180deg, var(--lucht-boven, #07090D) 0%, var(--lucht-onder, #0E1422) 100%);
+  transition: background 3s ease;
+}
+.hemel { position: absolute; transform: translate(-50%, -50%); transition: left 60s linear, top 60s linear; }
+.hemel.zon {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: radial-gradient(circle at 45% 40%, #FFFFFF 0%, #FFF4DA 35%, #FFD9A0 70%, rgba(255, 210, 150, 0.9) 100%);
+  box-shadow: 0 0 40px 12px rgba(255, 228, 180, 0.55), 0 0 140px 60px rgba(255, 210, 150, 0.22), 0 0 320px 140px rgba(255, 200, 140, 0.10);
+}
+.app[data-licht="schemer"] .hemel.zon { background: radial-gradient(circle at 45% 40%, #FFF1DC, #FFB873 70%, #F08A4B); box-shadow: 0 0 50px 16px rgba(255, 160, 90, 0.5), 0 0 200px 90px rgba(255, 140, 80, 0.2); }
+.hemel.maan svg { display: block; filter: drop-shadow(0 0 14px rgba(214, 230, 255, 0.55)) drop-shadow(0 0 60px rgba(168, 200, 255, 0.25)); }
+/* Overdag: de lichte lucht vraagt om iets meer diepte onder de letters die los op de achtergrond staan. */
+.app[data-licht="dag"] :is(.kolom-kop, .voorbeeld, .rail-knop, .laag-naam) { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); color: rgba(244, 246, 250, 0.92); }
+.app[data-licht="dag"] :is(.rail-knoppen, .modus) { background: rgba(7, 9, 13, 0.32); border-radius: var(--r-rij); backdrop-filter: blur(12px); }
+.app[data-lucht] .huis::before { opacity: 0.7; }
+
+/* ── Ochtend- en avondstand ─────────────────────────────────────────────────────────────────────────────────────── */
+.dagstart-titel { font-size: var(--t-klok); font-weight: 200; letter-spacing: -0.03em; line-height: 1.1; }
+.dagstart-tekst { font-size: var(--t-tekst); color: rgba(235, 240, 248, 0.82); line-height: 1.45; text-wrap: pretty; }
+.dagstart .lbl::first-letter { text-transform: uppercase; }
+.app.stand-ochtend .dagstart { box-shadow: 0 40px 80px -24px rgba(0,0,0,0.8), 0 0 60px -20px rgba(255, 201, 138, 0.35); }
+.app.stand-ochtend .vandaag .afspraak strong { font-size: 17px; }
+/* In de ochtend staat de mail op Overzicht; op Thuis blijft het bij je dag. */
+.app.stand-ochtend #plek-links > .mail { display: none; }
+/* Avond: alleen nog de kaart met morgen, de kamer, de camera en de knoppen. */
+.app.stand-avond :is(#plek-links, #kolom-dag) > :is(.vandaag, .belangrijk, .mail) { display: none; }
+.app.stand-avond .dagstart { box-shadow: 0 40px 80px -24px rgba(0,0,0,0.8), 0 0 60px -20px rgba(150, 120, 255, 0.35); }
+.app.stand-avond .huis { filter: saturate(0.85) brightness(0.92); }
+
+/* ── Vandaag gezien ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.tijdlijn { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.gezien { display: grid; grid-template-columns: 44px 64px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 0; position: relative; }
+.gezien + .gezien { border-top: 1px solid var(--rand); }
+.gezien-tijd { font-size: var(--t-klein); color: var(--ijs); }
+.gezien-beeld { width: 64px; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--r-klein); background: var(--vlak-1); }
+.gezien-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gezien-tekst strong { font-weight: 500; font-size: var(--t-tekst); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tijdlijn.breed { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); column-gap: var(--gat); }
+.tijdlijn.breed .gezien + .gezien { border-top: 0; }
+.tijdlijn.breed .gezien { border-bottom: 1px solid var(--rand); }
+
+/* Tijden in het tandwiel */
+.lamp.periode { flex-wrap: wrap; }
+.inst-tijden { display: flex; align-items: center; gap: 8px; flex-basis: 100%; }
+.tijd-veld { flex: 0 0 120px; color-scheme: dark; }
+
+/* ── Telefoon als app ───────────────────────────────────────────────────────────────────────────────────────────── */
+/* Ruimte voor de inkeping en de balk onderin van de iPhone als Atlas als app op het beginscherm staat. */
+.stage { padding-left: max(var(--rand-pagina), env(safe-area-inset-left)); padding-right: max(var(--rand-pagina), env(safe-area-inset-right)); }
+@media (max-width: 1000px) {
+  .bovenbalk { margin-top: max(16px, env(safe-area-inset-top)) !important; }
+  .schermen { bottom: max(16px, env(safe-area-inset-bottom)); }
+  .stage { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .toasts { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  /* Op de telefoon geen glans-effect en minder blur: scheelt batterij en blijft vloeiend. */
+  .gl { backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%); }
+  .dagstart-titel { font-size: 30px; }
+  /* In de ochtend- en avondstand staat de begroeting op de telefoon bovenaan, boven het huis. */
+  #dagstart { order: 0; }
+  .app:not(.overzicht, .op-pagina) :is(.links, .rechts) > * { margin: 0 16px 16px; }
+  .app[data-lucht] .lucht { position: fixed; }
+  /* Zonder blur op de balk zelf, anders blijven de vaste schermknoppen aan de balk plakken. */
+  .bovenbalk.gl { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .hemel.zon { width: 48px; height: 48px; }
+  /* Tikken voelt direct: geen grijze flits, en knoppen veren iets in. */
+  button, a { -webkit-tap-highlight-color: transparent; }
+  .rail-knop:active, .dock-knop:active, .favoriet:active { transform: scale(0.96); }
+}
+@media (display-mode: standalone) {
+  body { overscroll-behavior-y: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
 }

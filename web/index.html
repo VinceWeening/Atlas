@@ -2,15 +2,24 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#07090D">
 <title>Atlas</title>
+<!-- Als app op het beginscherm van de telefoon: eigen icoon, geen adresbalk, donkere statusbalk. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 </head>
 <body>
 <div class="app">
+  <div class="lucht" id="lucht" aria-hidden="true"></div>
   <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
   <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
     <div class="rail-knoppen" id="verdiepingen"></div>
@@ -49,6 +58,13 @@
 
     <!-- Thuis: links de dag, rechts de kamer en de camera. Op Overzicht verhuizen deze blokken naar de kolommen. -->
     <div class="links" id="plek-links">
+      <!-- Ochtend- en avondstand: een rustige kaart bovenaan met wat er vandaag (of morgen) is. -->
+      <section class="gl dagstart" id="dagstart" data-blok="dagstart" aria-live="polite" hidden><div class="gl-in paneel">
+        <p class="lbl" id="dagstart-label"></p>
+        <h2 class="dagstart-titel" id="dagstart-titel"></h2>
+        <p class="dagstart-tekst" id="dagstart-tekst"></p>
+      </div></section>
+
       <section class="gl vandaag" aria-label="Vandaag" data-blok="vandaag"><div class="gl-in paneel">
         <div class="kop"><h2 class="lbl">Vandaag</h2><span class="mono muted klein" id="aantal-afspraken"></span></div>
         <div id="agenda" class="agenda"></div>
@@ -108,6 +124,10 @@
     <div class="kolommen" id="kolommen">
       <section class="kolom" id="kolom-dag" aria-labelledby="kolom-dag-kop"><h2 class="kolom-kop" id="kolom-dag-kop">Mijn dag</h2></section>
       <section class="kolom" id="kolom-huis" aria-labelledby="kolom-huis-kop"><h2 class="kolom-kop" id="kolom-huis-kop">Huis</h2>
+        <section class="gl" aria-label="Vandaag aan de deur" data-blok="tijdlijn" id="tijdlijn-blok"><div class="gl-in paneel">
+          <div class="kop"><h2 class="lbl">Vandaag gezien</h2><span class="mono muted klein" id="tijdlijn-aantal"></span></div>
+          <ol class="tijdlijn" id="tijdlijn"></ol>
+        </div></section>
         <section class="gl" aria-label="Favorieten" data-blok="favorieten" id="favorieten-blok"><div class="gl-in paneel">
           <div class="kop"><h2 class="lbl">Favorieten</h2></div>
           <div class="favorieten" id="favorieten"></div>
@@ -143,6 +163,10 @@
 
     <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
       <div class="camera-raster" id="cameras-lijst"></div>
+      <section class="gl" aria-label="Vandaag gezien" id="tijdlijn-pagina"><div class="gl-in paneel">
+        <div class="kop"><h2 class="lbl">Vandaag gezien</h2><span class="mono muted klein" id="tijdlijn-pagina-aantal"></span></div>
+        <ol class="tijdlijn breed" id="tijdlijn-pagina-lijst"></ol>
+      </div></section>
       <div class="kop"><h2 class="lbl">Terugkijken</h2></div>
       <div class="opnames" id="opnames-lijst"></div>
     </section>

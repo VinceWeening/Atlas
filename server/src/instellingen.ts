@@ -1,7 +1,7 @@
 // Instellingen uit het tandwiel. Ze staan op de server, zodat pc en telefoon hetzelfde laten zien.
 import { bewaar, lees } from './opslag.js';
 
-export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen'] as const;
+export const BLOKKEN = ['huis', 'vandaag', 'belangrijk', 'mail', 'kamer', 'favorieten', 'camera', 'scenes', 'hud', 'frigate', 'jellyfin', 'seerr', 'downloads', 'spraak', 'sneltoetsen', 'lucht', 'tijdlijn'] as const;
 /** Blokken die standaard uit staan; de rest staat aan. */
 // De spraakbol doet pas iets in fase 3, dus die staat tot dan uit.
 const STANDAARD_UIT: readonly Blok[] = ['jellyfin', 'seerr', 'downloads', 'spraak'];
@@ -24,7 +24,11 @@ export type Meldingen = {
   zones: string[];
   /** Namen uit de gezichtsherkenning van Frigate die geen melding geven, bijvoorbeeld de mensen die hier wonen. */
   bekenden: string[];
+  /** Stille uren: dan geen melding op pc of telefoon. Ze komen wel in de tijdlijn. */
+  stil: Periode;
 };
+/** Een stuk van de dag, zoals 23:00 tot 07:00. Mag over middernacht gaan. */
+export type Periode = { aan: boolean; van: string; tot: string };
 export type Instellingen = {
   blokken: Record<Blok, boolean>;
   /** Startscherm voor een breed scherm (pc) en een smal scherm (telefoon). */
@@ -38,16 +42,29 @@ export type Instellingen = {
   snelkoppelingen: string[];
   /** Eigen namen voor apparaten, op entiteit. Gaan voor de naam uit Home Assistant. */
   namen: Record<string, string>;
+  /** Ochtendstand (agenda groot) en avondstand (rust) op Thuis en Overzicht. */
+  standen: { ochtend: Periode; avond: Periode };
 };
 
 const standaard: Instellingen = {
   blokken: Object.fromEntries(BLOKKEN.map((b) => [b, !STANDAARD_UIT.includes(b)])) as Record<Blok, boolean>,
   start: { breed: 'thuis', smal: 'overzicht' },
   belangrijk: [],
-  meldingen: { pc: true, telefoon: false, toestel: null, soorten: ['person'], camerasUit: [], wachttijd: 2, zones: [], bekenden: [] },
+  meldingen: {
+    pc: true,
+    telefoon: false,
+    toestel: null,
+    soorten: ['person'],
+    camerasUit: [],
+    wachttijd: 2,
+    zones: [],
+    bekenden: [],
+    stil: { aan: false, van: '23:00', tot: '07:00' },
+  },
   favorieten: [],
   snelkoppelingen: [],
   namen: {},
+  standen: { ochtend: { aan: true, van: '06:00', tot: '10:00' }, avond: { aan: true, van: '21:00', tot: '01:00' } },
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);
@@ -57,10 +74,27 @@ huidig.meldingen = { ...standaard.meldingen, ...huidig.meldingen };
 huidig.favorieten ??= [];
 huidig.snelkoppelingen ??= [];
 huidig.namen ??= {};
+huidig.standen = { ...standaard.standen, ...huidig.standen };
 
 export const instellingen = () => huidig;
 
 const isDatum = (w: unknown): w is string => typeof w === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(w) && !Number.isNaN(Date.parse(w));
+const isTijd = (w: unknown): w is string => typeof w === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(w);
+const isPeriode = (w: unknown): w is Periode => {
+  const p = w as Partial<Periode> | null;
+  return !!p && typeof p === 'object' && typeof p.aan === 'boolean' && isTijd(p.van) && isTijd(p.tot);
+};
+/** Of het nu (in Nederlandse tijd) binnen een periode valt; een periode als 23:00-07:00 loopt over middernacht. */
+export function nuIn(p: Periode, nu = new Date()) {
+  if (!p.aan) return false;
+  const [u, m] = nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' }).split(':').map(Number);
+  const tijd = u * 60 + m;
+  const [vu, vm] = p.van.split(':').map(Number);
+  const [tu, tm] = p.tot.split(':').map(Number);
+  const van = vu * 60 + vm;
+  const tot = tu * 60 + tm;
+  return van <= tot ? tijd >= van && tijd < tot : tijd >= van || tijd < tot;
+}
 const isScherm = (w: unknown): w is Scherm => w === 'thuis' || w === 'overzicht';
 
 /** Controleert wat het scherm stuurt en neemt alleen bekende, geldige velden over. Geeft een foutmelding of null. */
@@ -110,6 +144,15 @@ export function zetInstellingen(nieuw: unknown): string | null {
     }
     if (Object.keys(volgende.namen).length > 500) return 'Te veel eigen namen';
   }
+  if (n.standen !== undefined) {
+    const st = n.standen as Partial<Instellingen['standen']> | null;
+    if (!st || typeof st !== 'object') return 'Ongeldige standen';
+    for (const stand of ['ochtend', 'avond'] as const) {
+      if (st[stand] === undefined) continue;
+      if (!isPeriode(st[stand])) return `Ongeldige ${stand}stand`;
+      volgende.standen[stand] = { aan: st[stand]!.aan, van: st[stand]!.van, tot: st[stand]!.tot };
+    }
+  }
   if (n.meldingen !== undefined) {
     const m = n.meldingen as Partial<Meldingen>;
     if (!m || typeof m !== 'object') return 'Ongeldige meldingen';
@@ -144,6 +187,10 @@ export function zetInstellingen(nieuw: unknown): string | null {
       if (!Array.isArray(m.bekenden) || m.bekenden.length > 30 || m.bekenden.some((b) => typeof b !== 'string' || !b.trim() || b.length > 60))
         return 'Ongeldige naam';
       v.bekenden = [...new Set(m.bekenden.map((b) => b.trim()))];
+    }
+    if (m.stil !== undefined) {
+      if (!isPeriode(m.stil)) return 'Ongeldige stille uren';
+      v.stil = { aan: m.stil.aan, van: m.stil.van, tot: m.stil.tot };
     }
     if (m.wachttijd !== undefined) {
       if (typeof m.wachttijd !== 'number' || !Number.isInteger(m.wachttijd) || m.wachttijd < 0 || m.wachttijd > 60) return 'Ongeldige wachttijd';

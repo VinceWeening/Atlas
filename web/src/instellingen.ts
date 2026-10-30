@@ -12,7 +12,10 @@ export type Meldingen = {
   wachttijd: number;
   zones: string[];
   bekenden: string[];
+  stil: Periode;
 };
+/** Een stuk van de dag, zoals 23:00 tot 07:00; mag over middernacht gaan. */
+export type Periode = { aan: boolean; van: string; tot: string };
 export type Instellingen = {
   blokken: Record<string, boolean>;
   start: { breed: Scherm; smal: Scherm };
@@ -21,6 +24,7 @@ export type Instellingen = {
   favorieten: string[];
   snelkoppelingen: string[];
   namen: Record<string, string>;
+  standen: { ochtend: Periode; avond: Periode };
 };
 type Opties = {
   frigate: { ingesteld: boolean; bereikbaar: boolean };
@@ -86,6 +90,7 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
       ['favorieten', 'Favorieten', 'Lampen met een ster, in het dock onderin'],
       ['scenes', 'Knoppen onderin', 'Scènes of je eigen knoppen in het dock'],
       ['hud', 'Status bovenin', 'Temperatuur binnen, lampen aan en de voordeur'],
+      ['tijdlijn', 'Vandaag gezien', 'Wie of wat de camera’s vandaag zagen, op Overzicht'],
     ],
   ],
   [
@@ -100,6 +105,7 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
   [
     'Extra',
     [
+      ['lucht', 'Lucht zoals buiten', 'Licht of donker met de zon en maan op hun echte plek'],
       ['spraak', 'Spraakbol', 'Doet pas iets vanaf fase 3'],
       ['sneltoetsen', 'Sneltoetsen', '1 t/m 4 voor de schermen, pijltjes voor de verdiepingen'],
     ],
@@ -134,6 +140,35 @@ function schakelaarRij(naam: string, aan: boolean, wissel: (aan: boolean) => Pro
   return rij;
 }
 
+/** Een rij met een schakelaar en twee tijden (van, tot), voor de standen en de stille uren. */
+function periodeRij(naam: string, uitleg: string, p: Periode, bewaar: (p: Periode) => Promise<void>) {
+  const rij = schakelaarRij(naam, p.aan, (aan) => bewaar((p = { ...p, aan })), uitleg);
+  const tijden = maak('div', 'inst-tijden');
+  for (const deel of ['van', 'tot'] as const) {
+    const veld = maak('input', 'inst-veld tijd-veld');
+    veld.type = 'time';
+    veld.value = p[deel];
+    veld.setAttribute('aria-label', `${naam} ${deel}`);
+    veld.addEventListener('change', async () => {
+      if (!/^\d{2}:\d{2}$/.test(veld.value)) return;
+      const vorig = p;
+      p = { ...p, [deel]: veld.value };
+      try {
+        await bewaar(p);
+      } catch {
+        p = vorig;
+        veld.value = vorig[deel];
+        meldFout('Bewaren lukte niet');
+      }
+    });
+    tijden.append(veld);
+    if (deel === 'van') tijden.append(maak('span', 'muted klein', 'tot'));
+  }
+  rij.classList.add('periode');
+  rij.append(tijden);
+  return rij;
+}
+
 export function instellingen(terug: { google: () => void; opgeslagen: (inst: Instellingen) => void }) {
   const venster = document.getElementById('instellingen') as HTMLDialogElement;
   const inhoud = document.getElementById('instellingen-inhoud')!;
@@ -164,6 +199,14 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
         raster.append(schakelaarRij(naam, inst.blokken[id] !== false, async (aan) => void (inst = await bewaar({ blokken: { [id]: aan } })), uitleg));
       blokken.append(maak('p', 'inst-label', groep), raster);
     }
+
+    const standen = maak('section', 'inst-sectie');
+    standen.append(
+      maak('h3', 'lbl', 'OCHTEND EN AVOND'),
+      maak('p', 'muted klein', 'In de ochtendstand staat je dag bovenaan. In de avondstand wordt het rustig: alleen de kamer, de camera en de knoppen, met wat er morgen is.'),
+      periodeRij('Ochtendstand', 'Je agenda en wat belangrijk is groot bovenaan', inst.standen.ochtend, async (p) => void (inst = await bewaar({ standen: { ...inst.standen, ochtend: p } }))),
+      periodeRij('Avondstand', 'Rust: geen mail en agenda, wel morgen in één regel', inst.standen.avond, async (p) => void (inst = await bewaar({ standen: { ...inst.standen, avond: p } }))),
+    );
 
     const start = maak('section', 'inst-sectie');
     start.append(maak('h3', 'lbl', 'STARTSCHERM'));
@@ -240,7 +283,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     data.append(regels, rij, melding);
 
     return {
-      scherm: [blokken, start],
+      scherm: [blokken, standen, start],
       data: [data],
       meldingen: [await tekenMeldingen(inst, (nieuw) => (inst = nieuw))],
       knoppen: [await tekenSnelkoppelingen(inst)],
@@ -323,6 +366,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     sectie.append(
       schakelaarRij('Op de pc', m().pc, (aan) => bewaarM({ pc: aan })),
       schakelaarRij('Op de telefoon', m().telefoon, (aan) => bewaarM({ telefoon: aan })),
+      periodeRij('Stille uren', 'Geen meldingen; wat er was staat ’s ochtends in Vandaag gezien', m().stil, (p) => bewaarM({ stil: p })),
     );
 
     const toestelRij = maak('div', 'lamp');

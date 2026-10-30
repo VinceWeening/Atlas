@@ -2,7 +2,7 @@
 // instellingen uit het tandwiel en stuurt het door: naar de telefoon via de Home Assistant-app, en naar de pc via
 // /api/meldingen, dat de Windows-app en de pagina zelf ophalen.
 import type { Toestel } from './ha.js';
-import { instellingen } from './instellingen.js';
+import { instellingen, nuIn } from './instellingen.js';
 import { Dienst, controles } from './zoek.js';
 
 export type Melding = {
@@ -17,6 +17,8 @@ export type Melding = {
   beeld: string | null;
   /** Of de pc deze melding moet laten zien. */
   pc: boolean;
+  /** Binnengekomen tijdens de stille uren: niet gemeld, wel in de tijdlijn. */
+  stil?: boolean;
 };
 
 type Gebeurtenis = {
@@ -106,6 +108,35 @@ export class Meldingen {
         duur: g.end_time ? Math.round(g.end_time - g.start_time) : null,
         beeld: `/api/meldingen/${encodeURIComponent(g.id)}/beeld`,
         video: `/api/meldingen/${encodeURIComponent(g.id)}/video`,
+      }));
+  }
+
+  /**
+   * Tijdlijn van vandaag: alles wat Frigate sinds middernacht zag van de soorten in Meldingen › Waarvoor, nieuwste eerst.
+   * Ook wat tijdens de stille uren of de stilte na een melding binnenkwam, zodat je 's ochtends ziet wie er was.
+   */
+  async vandaag() {
+    if (!this.frigate.adres) return null;
+    const inst = instellingen().meldingen;
+    const middernacht = new Date(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' }) + 'T00:00:00');
+    const soorten = inst.soorten.join(',') || 'person';
+    const antwoord = await fetch(
+      `${this.frigate.adres}/api/events?limit=60&after=${Math.floor(middernacht.getTime() / 1000)}&labels=${encodeURIComponent(soorten)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!antwoord.ok) throw new Error(`Frigate gaf ${antwoord.status}`);
+    const lijst = (await antwoord.json()) as Gebeurtenis[];
+    const gemeld = new Set(this.lijst.filter((m) => !m.stil).map((m) => m.id));
+    return lijst
+      .filter((g) => !g.false_positive && !inst.camerasUit.includes(g.camera))
+      .sort((a, b) => b.start_time - a.start_time)
+      .map((g) => ({
+        id: g.id,
+        camera: cameraNaam(g.camera),
+        titel: naamVan(g) ?? soortNamen[g.label] ?? cameraNaam(g.label),
+        tijd: new Date(g.start_time * 1000).toISOString(),
+        beeld: `/api/meldingen/${encodeURIComponent(g.id)}/beeld`,
+        gemeld: gemeld.has(g.id),
       }));
   }
 
@@ -248,8 +279,11 @@ export class Meldingen {
 
   private async verstuur(m: Omit<Melding, 'volg' | 'pc'>, test = false) {
     const inst = instellingen().meldingen;
-    this.lijst.push({ ...m, volg: ++this.volg, pc: inst.pc });
+    // Tijdens de stille uren alleen onthouden; een testmelding gaat altijd door.
+    const stil = !test && nuIn(inst.stil);
+    this.lijst.push({ ...m, volg: ++this.volg, pc: inst.pc && !stil, stil });
     if (this.lijst.length > 50) this.lijst.shift();
+    if (stil) return null;
     if (!inst.telefoon || !inst.toestel) return test ? 'De telefoon staat uit in het tandwiel.' : null;
     try {
       await this.telefoon.melding(inst.toestel, m.titel, m.tekst);
