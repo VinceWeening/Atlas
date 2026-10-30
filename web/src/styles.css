@@ -833,10 +833,20 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--duur-midden); tr
 .opdracht-antwoord[data-soort="denkt"] { color: var(--gedempt); animation: denkt 1.4s ease-in-out infinite; }
 @keyframes denkt { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .opdracht-antwoord[data-soort="denkt"] { animation: none; } }
-.opdracht-antwoord[data-soort="ai"] { color: var(--tekst); }
-.opdracht-bron { margin-left: 10px; color: var(--zacht); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
+/* Het gesprek met de AI: vraag klein en gedempt, antwoord in gewone tekst, alinea's blijven staan. Lang = scrollen. */
+.opdracht-gesprek { max-height: min(52vh, 460px); overflow-y: auto; overscroll-behavior: contain; }
+.opdracht-gesprek:empty { display: none; }
+.opdracht-gesprek:not(:empty) { padding: 4px 18px 8px; border-top: 1px solid var(--rand); }
+.opdracht-gesprek-kop { display: flex; justify-content: flex-end; position: sticky; top: 0; padding-top: 6px; }
+.opdracht-nieuw { border: 0; background: none; padding: 4px 0; color: var(--zacht); font: inherit; font-size: 12px; cursor: pointer; }
+.opdracht-nieuw:hover { color: var(--tekst); }
+.opdracht-vraag { margin: 14px 0 4px; font-size: var(--t-klein); color: var(--gedempt); }
+.opdracht-ai { margin: 0; font-size: var(--t-tekst); line-height: 1.55; color: var(--tekst); white-space: pre-line; overflow-wrap: anywhere; }
+.opdracht-bron { margin: 4px 0 6px; color: var(--zacht); font-size: 11px; letter-spacing: .04em; }
+.opdracht-bron a { color: var(--zacht); text-decoration: underline; text-underline-offset: 2px; }
+.opdracht-bron a:hover { color: var(--tekst); }
 .opdracht-tips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 4px; }
-.opdracht-tips:empty { display: none; }
+.opdracht-tips:empty, .opdracht-tips[hidden] { display: none; }
 .opdracht-tip {
   min-height: 32px; padding: 0 12px; border: 1px solid var(--rand); border-radius: var(--r-pil); background: var(--vlak-1);
   color: var(--gedempt); font: inherit; font-size: 12px; transition: background var(--duur-hover) var(--uit), color var(--duur-hover) var(--uit);

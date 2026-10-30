@@ -14,7 +14,7 @@ import { Aanwezig } from './aanwezig.js';
 import { regen, volgendeVertrek } from './vertrek.js';
 import { middernacht } from './energie.js';
 import { naarTekst, spraakAan, spraakBereikbaar, spraakModel, zorgVoorSpraakModel } from './spraak.js';
-import { aiAan, aiBereikbaar, aiGeladen, aiModel, aiModelStaat, beantwoord, herschrijf, zorgVoorModel } from './ai.js';
+import { type Beurt, aiAan, aiGeladen, aiModel, aiModelStaat, beantwoord, claudeBereikbaar, claudeModel, herschrijf, ollamaBereikbaar, zorgVoorModel } from './ai.js';
 import { ruimte } from './ruimte.js';
 import { versie } from './versie.js';
 import { VoorbeeldHuis, voorbeeld } from './voorbeeld.js';
@@ -311,8 +311,11 @@ async function watAtlasWeet() {
 
 // Opnames voor de eigen Whisper-server komen binnen als ruwe audio, hooguit 5 MB (ruim een minuut).
 app.addContentTypeParser(/^audio\//, { parseAs: 'buffer', bodyLimit: 5 * 1024 * 1024 }, (_request, body, klaar) => klaar(null, body));
-// aan: spraak via de eigen Whisper-server; vragen: de lokale AI beantwoordt vrije vragen.
-app.get('/api/spraak', async () => ({ aan: spraakAan(), vragen: aiAan() && instellingen().assistent.vragen }));
+// aan: spraak via de eigen Whisper-server; vragen: een AI (lokaal of Claude) beantwoordt vrije vragen.
+app.get('/api/spraak', async () => {
+  const a = instellingen().assistent;
+  return { aan: spraakAan(), vragen: aiAan(a.cloud) && a.vragen };
+});
 app.post('/api/spraak', async (request, reply) => {
   if (!spraakAan()) return reply.code(404).send({ fout: 'Spraak op de server staat niet aan' });
   const type = String(request.headers['content-type'] ?? '');
@@ -329,14 +332,15 @@ app.post('/api/spraak', async (request, reply) => {
 type Controle = { naam: string; staat: 'goed' | 'let-op' | 'uit'; tekst: string };
 app.get('/api/status', async () => {
   const inst = instellingen();
-  const [h, e, a, frigate, spraak, buien, ai, geladen] = await Promise.allSettled([
+  const [h, e, a, frigate, spraak, buien, ai, cl, geladen] = await Promise.allSettled([
     huis.huis(),
     huis.energie(),
     huis.afval(),
     meldingen.frigateCameras(),
     spraakBereikbaar(),
     regen(),
-    aiBereikbaar(),
+    ollamaBereikbaar(),
+    claudeBereikbaar(),
     aiGeladen(),
   ]);
   const lijst: Controle[] = [];
@@ -414,6 +418,16 @@ app.get('/api/status', async () => {
             : { naam: 'Lokale AI (Ollama)', staat: 'goed', tekst: `${aiModel}: helpt bij onbekende zinnen${inst.assistent.vragen ? ' en beantwoordt vragen' : ''}` }
         : { naam: 'Lokale AI (Ollama)', staat: 'let-op', tekst: 'OLLAMA_URL ingesteld, maar Ollama antwoordt niet.' },
   );
+  const clOk = cl.status === 'fulfilled' ? cl.value : false;
+  lijst.push(
+    clOk === null
+      ? { naam: 'Claude (via internet)', staat: 'uit', tekst: 'Geen ANTHROPIC_API_KEY: algemene vragen alleen met de lokale AI.' }
+      : !inst.assistent.cloud
+        ? { naam: 'Claude (via internet)', staat: 'uit', tekst: 'Uitgezet in het tandwiel bij Spraak en AI.' }
+        : clOk
+          ? { naam: 'Claude (via internet)', staat: 'goed', tekst: `${claudeModel}: beantwoordt vragen en zoekt op internet` }
+          : { naam: 'Claude (via internet)', staat: 'let-op', tekst: 'ANTHROPIC_API_KEY ingesteld, maar Claude antwoordt niet. Klopt de sleutel en ANTHROPIC_MODEL?' },
+  );
   // Of spraak en AI passen in het geheugen en op de schijf van de server.
   const r = await ruimte(geladen.status === 'fulfilled' ? geladen.value : 0);
   lijst.push({ naam: 'Ruimte voor spraak en AI', staat: r.advies.past ? 'goed' : 'let-op', tekst: r.advies.tekst });
@@ -434,9 +448,15 @@ app.get('/api/afval', async (_request, reply) => {
 });
 
 // Een opdracht in gewone taal uit de opdrachtbalk of de spraakbol.
-app.post<{ Body: { tekst?: unknown } }>('/api/opdracht', async (request, reply) => {
-  const tekst = request.body?.tekst;
-  if (typeof tekst !== 'string' || tekst.length > 200) return reply.code(400).send({ fout: 'Geen opdracht' });
+// gesproken: kort antwoorden; gesprek: de vorige vragen en antwoorden, zodat je kunt doorvragen.
+app.post<{ Body: { tekst?: unknown; gesproken?: unknown; gesprek?: unknown } }>('/api/opdracht', async (request, reply) => {
+  const { tekst, gesproken } = request.body ?? {};
+  if (typeof tekst !== 'string' || tekst.length > 500) return reply.code(400).send({ fout: 'Geen opdracht' });
+  const gesprek = (Array.isArray(request.body?.gesprek) ? request.body.gesprek : [])
+    .filter((b): b is Beurt => !!b && typeof b === 'object' && typeof b.vraag === 'string' && typeof b.antwoord === 'string')
+    .slice(-6)
+    .map((b) => ({ vraag: b.vraag.slice(0, 500), antwoord: b.antwoord.slice(0, 2000) }));
+  const a = instellingen().assistent;
   try {
     return await voerUit(tekst, {
       huis: async () => metEigenNamen(await huis.huis()),
@@ -445,8 +465,9 @@ app.post<{ Body: { tekst?: unknown } }>('/api/opdracht', async (request, reply) 
       lamp: (id, opdracht) => huis.lamp(id, opdracht),
       bedien: (id, aan) => huis.bedien(id, aan),
       scene: (id) => huis.scene(id),
-      hulp: herschrijf,
-      vraag: aiAan() && instellingen().assistent.vragen ? async (zin) => beantwoord(zin, await watAtlasWeet()) : undefined,
+      hulp: aiAan(a.cloud) ? (zin, namen) => herschrijf(zin, namen, a.cloud) : undefined,
+      vraag: aiAan(a.cloud) && a.vragen ? async (zin) => beantwoord(zin, await watAtlasWeet(), { gesproken: gesproken === true, gesprek, overMij: a.overMij, cloud: a.cloud }) : undefined,
+      gesprek: gesprek.length > 0,
     });
   } catch (fout) {
     app.log.error(fout);

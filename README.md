@@ -132,7 +132,7 @@ Druk **Ctrl+K** of **/** (of tik op het sterretje rechtsboven) en typ wat Atlas 
 - `hoe warm is het in de keuken`, `welke lampen zijn aan`, `hoeveel stroom gebruiken we`
 - `ga naar camera's`
 
-Atlas begrijpt een vaste set zinnen (geen AI) en bedient alleen lampen, schakelaars en scènes; sloten nooit. Met het blok **Spraakbol** aan tik je op de bol onderin en spreek je de opdracht in; het antwoord komt dan ook hardop. Dat gebruikt de spraakherkenning van de browser (Chrome, Edge, Safari op de iPhone). Werkt die niet, dan typ je.
+Atlas begrijpt een vaste set zinnen en bedient alleen lampen, schakelaars en scènes; sloten nooit. Met het blok **Spraakbol** aan tik je op de bol onderin en spreek je de opdracht in; het antwoord komt dan ook hardop. Dat gebruikt de spraakherkenning van de browser (Chrome, Edge, Safari op de iPhone). Werkt die niet, dan typ je.
 
 ### Spraak en lokale AI op je eigen server
 
@@ -148,9 +148,18 @@ Wat het dan doet:
 
 - **Spreken**: Ctrl+Spatie of de spraakbol. Atlas neemt op tot je even stil bent, Whisper maakt er tekst van, en de opdracht wordt uitgevoerd. Elke server die `/v1/audio/transcriptions` kent werkt.
 - **Onbekende zinnen**: "maak het donker in de woonkamer" herschrijft het model naar een zin die Atlas kent ("woonkamer uit"), en dat zie je erbij staan.
-- **Vragen**: "wat staat er vandaag nog?", "moet ik een jas aan?", "wanneer moet ik weg?". Het model krijgt een kort overzicht van je agenda, belangrijke mail, het weer, de lampen, energie, afval en wie er thuis is, en antwoordt in een of twee zinnen. Er staat "lokale AI" achter, zodat je weet waar het vandaan komt.
+- **Vragen**: "wat staat er vandaag nog?", "moet ik een jas aan?", "wanneer moet ik weg?", maar ook gewone vragen als "hoe lang kook ik een ei?" of "leg uit hoe een warmtepomp werkt". Het model krijgt een kort overzicht van je agenda, belangrijke mail, het weer, de lampen, energie, afval en wie er thuis is. Gesproken antwoordt het kort; getypt mag het wat langer. Je kunt doorvragen ("en morgen?"): Atlas onthoudt het gesprek tien minuten, of tot je op **Nieuw gesprek** klikt. Onder elk antwoord staat waar het vandaan komt.
 
 Het model bedient zelf nooit iets: alleen de vaste zinnen doen iets in huis, en sloten en camera's nooit.
+
+### Slimmere antwoorden met Claude (optioneel)
+
+Een klein lokaal model weet weinig van de wereld. Voor echte algemene vragen, en actuele dingen als nieuws, sport of openingstijden, kan Atlas Claude gebruiken via internet. Claude zoekt dan zelf op internet en Atlas toont de gevonden sites onder het antwoord.
+
+1. Maak een API-sleutel op [platform.claude.com](https://platform.claude.com) (Settings › API keys) en zet er wat tegoed op.
+2. Vul bij de app Atlas in ZimaOS `ANTHROPIC_API_KEY` in en start Atlas opnieuw. Tandwiel › Koppelingen laat zien of Claude bereikbaar is.
+
+Kosten: standaard `claude-opus-5-5`, ongeveer een cent per vraag, en een paar cent als Claude iets op internet opzoekt. Wil je het zuiniger, zet `ANTHROPIC_MODEL` op `claude-haiku-5-5` (een fractie daarvan, iets minder slim). Let op: bij een vraag gaat het overzicht van agenda, mailonderwerpen en huis mee naar Anthropic. Wil je dat niet, zet dan in het tandwiel bij **Spraak en AI** de schakelaar **Claude via internet** uit; met Ollama erbij antwoordt dan de lokale AI. Bij **Over mij** in hetzelfde stuk schrijf je een paar regels over jezelf (werk, sport, wat je eet), zodat de antwoorden beter bij je passen. Dat blijft op de server en komt niet in de code.
 
 ## Het draaibare 3D-huis
 

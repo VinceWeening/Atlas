@@ -1,8 +1,19 @@
-// De opdrachtbalk: typ of zeg wat Atlas moet doen. De server begrijpt de zin en voert hem uit; hier zit alleen het
-// venster, de microfoon en het antwoord. Spraak gebruikt de spraakherkenning van de browser als die er is (Chrome, Edge,
+// De opdrachtbalk: typ of zeg wat Atlas moet doen, of stel een vraag. De server begrijpt de zin en voert hem uit, of laat
+// een AI antwoorden; hier zit alleen het venster, de microfoon, het antwoord en het lopende gesprek. Spraak gebruikt de spraakherkenning van de browser als die er is (Chrome, Edge,
 // Safari op iPhone); anders typ je.
 
-type Antwoord = { tekst: string; gedaan: boolean; scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras'; begrepen?: string; ai?: boolean };
+type Antwoord = {
+  tekst: string;
+  gedaan: boolean;
+  scherm?: 'thuis' | 'overzicht' | 'apparaten' | 'cameras';
+  begrepen?: string;
+  ai?: boolean;
+  bron?: 'lokaal' | 'claude';
+  bronnen?: { titel: string; url: string }[];
+};
+type Beurt = { vraag: string; antwoord: string };
+// Na tien minuten stilte begint een nieuw gesprek; dan gaat een losse vraag niet meer over het vorige onderwerp.
+const GESPREK_DUUR = 10 * 60_000;
 type Opties = {
   /** Of de opdrachtbalk aan staat in het tandwiel. */
   aan: () => boolean;
@@ -39,6 +50,9 @@ export function startOpdracht(opties: Opties) {
   const antwoord = $('opdracht-antwoord');
   const tips = $('opdracht-tips');
   const mic = $<HTMLButtonElement>('opdracht-mic');
+  const log = $('opdracht-gesprek');
+  const gesprek: (Beurt & { bron?: Antwoord['bron']; bronnen?: Antwoord['bronnen'] })[] = [];
+  let laatsteVraag = 0;
   const geschiedenis: string[] = [];
   let terug = -1;
   let luistert: Herkenning | null = null;
@@ -46,7 +60,7 @@ export function startOpdracht(opties: Opties) {
 
   // Staat er een eigen Whisper-server klaar, dan gaat spraak daarheen: dat blijft thuis en werkt ook in de Windows-app.
   let serverSpraak = false;
-  // Beantwoordt de lokale AI vrije vragen, dan staat er ook een vraag tussen de voorbeelden.
+  // Beantwoordt een AI vrije vragen, dan staan er ook vragen tussen de voorbeelden.
   let vragen = false;
   let opname: { stop: () => void } | null = null;
   mic.hidden = !HerkenningKlasse;
@@ -59,25 +73,62 @@ export function startOpdracht(opties: Opties) {
     })
     .catch(() => {});
 
-  const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' | 'denkt' | 'ai' = 'gewoon') => {
+  const zeg = (tekst: string, soort: 'gewoon' | 'gedaan' | 'fout' | 'luistert' | 'denkt' = 'gewoon') => {
     antwoord.textContent = tekst;
     antwoord.dataset.soort = soort;
     // Opnieuw afspelen: het nieuwe antwoord komt zacht binnen, ook als het vorige er nog stond.
     antwoord.classList.remove('nieuw');
     void antwoord.offsetWidth;
     antwoord.classList.add('nieuw');
-    if (soort === 'ai') {
-      // Klein erachter: dit kwam van de lokale AI, niet uit Home Assistant.
-      const bron = document.createElement('span');
-      bron.className = 'opdracht-bron';
-      bron.textContent = 'lokale AI';
-      antwoord.append(bron);
+  };
+
+  /** Het gesprek met de AI: elke vraag klein, het antwoord eronder, met waar het vandaan komt. */
+  const tekenGesprek = () => {
+    log.replaceChildren();
+    // Tijdens een gesprek geen voorbeelden eronder; die zijn er weer bij een nieuw gesprek.
+    tips.hidden = gesprek.length > 0;
+    if (!gesprek.length) return;
+    const kop = document.createElement('div');
+    kop.className = 'opdracht-gesprek-kop';
+    const nieuw = document.createElement('button');
+    nieuw.type = 'button';
+    nieuw.className = 'opdracht-nieuw';
+    nieuw.textContent = 'Nieuw gesprek';
+    nieuw.addEventListener('click', () => {
+      gesprek.length = 0;
+      tekenGesprek();
+      veld.focus();
+    });
+    kop.append(nieuw);
+    log.append(kop);
+    for (const b of gesprek) {
+      const vraag = document.createElement('p');
+      vraag.className = 'opdracht-vraag';
+      vraag.textContent = b.vraag;
+      const tekst = document.createElement('p');
+      tekst.className = 'opdracht-ai';
+      tekst.textContent = b.antwoord;
+      const onder = document.createElement('p');
+      onder.className = 'opdracht-bron';
+      // Klein eronder: dit kwam van een AI, niet uit Home Assistant, en welke pagina's Claude erbij zocht.
+      onder.append(b.bron === 'claude' ? 'Claude' : 'lokale AI');
+      for (const link of b.bronnen ?? []) {
+        const a = document.createElement('a');
+        a.href = link.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = new URL(link.url).hostname.replace(/^www\./, '');
+        a.title = link.titel;
+        onder.append(' · ', a);
+      }
+      log.append(vraag, tekst, onder);
     }
+    log.lastElementChild?.scrollIntoView({ block: 'nearest' });
   };
 
   const tekenTips = () => {
     tips.replaceChildren(
-      ...[...opties.tips(), ...(vragen ? ['Wat staat er vandaag nog?'] : [])].map((tip) => {
+      ...[...opties.tips(), ...(vragen ? ['Wat staat er vandaag nog?', 'Hoe lang moet een ei koken?'] : [])].map((tip) => {
         const knop = document.createElement('button');
         knop.type = 'button';
         knop.className = 'opdracht-tip';
@@ -96,6 +147,8 @@ export function startOpdracht(opties: Opties) {
     if (!venster.open) {
       zeg('');
       veld.value = '';
+      if (gesprek.length && Date.now() - laatsteVraag > GESPREK_DUUR) gesprek.length = 0;
+      tekenGesprek();
       tekenTips();
       venster.showModal();
     }
@@ -129,14 +182,31 @@ export function startOpdracht(opties: Opties) {
     geschiedenis.unshift(tekst);
     geschiedenis.splice(10);
     terug = -1;
-    // Een vraag aan de lokale AI duurt een paar seconden; dan laten zien dat Atlas nadenkt.
+    if (gesprek.length && Date.now() - laatsteVraag > GESPREK_DUUR) {
+      gesprek.length = 0;
+      tekenGesprek();
+    }
+    laatsteVraag = Date.now();
+    // Een vraag aan de AI duurt een paar seconden; dan laten zien dat Atlas nadenkt.
     const denkt = setTimeout(() => zeg('Even nadenken…', 'denkt'), 900);
     try {
-      const a = await fetch('/api/opdracht', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tekst }) });
+      const a = await fetch('/api/opdracht', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tekst, gesproken, gesprek: gesprek.slice(-6).map(({ vraag, antwoord }) => ({ vraag, antwoord })) }),
+      });
       const data = (await a.json()) as Antwoord & { fout?: string };
       if (!a.ok) throw new Error(data.fout ?? `Server gaf ${a.status}`);
-      // Herschreef de lokale AI de zin, dan zie je wat Atlas ervan maakte.
-      zeg(data.begrepen ? `${data.tekst} (begrepen als “${data.begrepen}”)` : data.tekst, data.gedaan ? 'gedaan' : data.ai ? 'ai' : 'gewoon');
+      if (data.ai) {
+        // Een antwoord van de AI komt in het gesprek, zodat je kunt doorvragen.
+        gesprek.push({ vraag: tekst, antwoord: data.tekst, bron: data.bron, bronnen: data.bronnen });
+        gesprek.splice(0, gesprek.length - 6);
+        zeg('');
+        tekenGesprek();
+      } else {
+        // Herschreef de AI de zin, dan zie je wat Atlas ervan maakte.
+        zeg(data.begrepen ? `${data.tekst} (begrepen als “${data.begrepen}”)` : data.tekst, data.gedaan ? 'gedaan' : 'gewoon');
+      }
       if (gesproken && opties.hardop()) spreek(data.tekst);
       if (data.gedaan) {
         opties.ververs();

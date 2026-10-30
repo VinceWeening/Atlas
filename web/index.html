@@ -212,9 +212,10 @@
   <dialog class="gl opdracht" id="opdracht" aria-label="Opdracht geven"><div class="gl-in">
     <form class="opdracht-vorm" id="opdracht-vorm" method="dialog">
       <svg class="opdracht-teken" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/></svg>
-      <input class="opdracht-veld" id="opdracht-veld" type="text" autocomplete="off" enterkeyhint="go" maxlength="200" placeholder="Wat moet Atlas doen?" aria-label="Opdracht">
+      <input class="opdracht-veld" id="opdracht-veld" type="text" autocomplete="off" enterkeyhint="go" maxlength="500" placeholder="Vraag of opdracht voor Atlas" aria-label="Vraag of opdracht">
       <button type="button" class="rond-knop opdracht-mic" id="opdracht-mic" aria-label="Inspreken" aria-pressed="false" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></button>
     </form>
+    <div class="opdracht-gesprek" id="opdracht-gesprek" aria-live="polite"></div>
     <p class="opdracht-antwoord" id="opdracht-antwoord" aria-live="polite"></p>
     <div class="opdracht-tips" id="opdracht-tips"></div>
   </div></dialog>

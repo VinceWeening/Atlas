@@ -58,10 +58,14 @@ export type Instellingen = {
   ingevouwen: string[];
   /** Spraak en de lokale AI. Werkt alleen als OLLAMA_URL of WHISPER_URL is ingesteld. */
   assistent: {
-    /** Vrije vragen ("wat moet ik vandaag nog doen?") beantwoorden met de lokale AI. */
+    /** Vrije vragen ("wat moet ik vandaag nog doen?", "hoe lang kook ik een ei?") beantwoorden met een AI. */
     vragen: boolean;
     /** Antwoorden hardop uitspreken als je iets zei. */
     hardop: boolean;
+    /** Claude via internet gebruiken als ANTHROPIC_API_KEY er is. Uit = alleen de lokale AI. */
+    cloud: boolean;
+    /** Wat je zelf over jezelf vertelt, zodat de AI je beter kent. Blijft op de server, niet in de code. */
+    overMij: string;
   };
 };
 
@@ -86,7 +90,7 @@ const standaard: Instellingen = {
   standen: { ochtend: { aan: true, van: '06:00', tot: '10:00' }, avond: { aan: true, van: '21:00', tot: '01:00' } },
   weg: { aan: false, allesUit: true, alleenWeg: false },
   vertrek: { reistijd: 20, plekken: [] },
-  assistent: { vragen: true, hardop: true },
+  assistent: { vragen: true, hardop: true, cloud: true, overMij: '' },
   ingevouwen: [],
 };
 
@@ -197,10 +201,14 @@ export function zetInstellingen(nieuw: unknown): string | null {
   if (n.assistent !== undefined) {
     const a = n.assistent as Partial<Instellingen['assistent']> | null;
     if (!a || typeof a !== 'object') return 'Ongeldige instelling spraak en AI';
-    for (const sleutel of ['vragen', 'hardop'] as const) {
+    for (const sleutel of ['vragen', 'hardop', 'cloud'] as const) {
       if (a[sleutel] === undefined) continue;
       if (typeof a[sleutel] !== 'boolean') return 'Ongeldige instelling spraak en AI';
       volgende.assistent[sleutel] = a[sleutel]!;
+    }
+    if (a.overMij !== undefined) {
+      if (typeof a.overMij !== 'string' || a.overMij.length > 3000) return 'Over mij mag hooguit 3000 tekens zijn';
+      volgende.assistent.overMij = a.overMij.trim();
     }
   }
   if (n.vertrek !== undefined) {
