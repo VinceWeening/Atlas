@@ -85,7 +85,7 @@ function maak<K extends keyof HTMLElementTagNameMap>(tag: K, klasse?: string, in
   return el;
 }
 
-const graden = (t: number) => `${t.toLocaleString('nl-NL', { maximumFractionDigits: 1 })} °C`;
+const graden = (t: number) => `${t.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}°`;
 const uur = (iso: string) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
 // Klok en dagboog
@@ -552,16 +552,28 @@ function tekenWeer() {
   tekst($('weer'), weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '');
 }
 
-/** Een regel onderin, alleen zolang iets echt nog voorbeeld is. */
+/** Een kleine chip in de bovenbalk, alleen zolang iets echt nog voorbeeld is. Klikken opent wat er nog gekoppeld moet. */
 function tekenOpmerking() {
   const opmerking = $('voorbeeld');
   const huis = staat.huis?.bron === 'voorbeeld';
   const google = !!staat.overzicht?.voorbeeld;
-  if (huis && google) tekst(opmerking, 'Voorbeeldgegevens · stel Home Assistant in en koppel Google via het tandwiel');
-  else if (huis) tekst(opmerking, 'Het huis is voorbeeld · stel Home Assistant in om je eigen huis te zien');
-  else tekst(opmerking, 'Agenda en mail zijn voorbeeld · koppel Google via het tandwiel');
+  const uitleg = huis && google
+    ? 'Voorbeeldgegevens: stel Home Assistant in en koppel Google'
+    : huis
+      ? 'Het huis is voorbeeld: stel Home Assistant in om je eigen huis te zien'
+      : 'Agenda en mail zijn voorbeeld: koppel Google';
+  opmerking.title = uitleg;
+  opmerking.setAttribute('aria-label', `${uitleg}. Open de koppelingen.`);
   opmerking.hidden = !huis && !google;
 }
+$('voorbeeld').addEventListener('click', () => {
+  try {
+    localStorage.setItem('atlas-inst-tab', 'koppelingen');
+  } catch {
+    // Dan opent het tandwiel op het laatste tabblad.
+  }
+  $('tandwiel').click();
+});
 
 function tekenAlles() {
   tekenKnoppen();
@@ -802,6 +814,8 @@ function plaatje(src: string, klasse: string) {
 function zetLink(id: string, poort: number | undefined) {
   const link = document.querySelector<HTMLAnchorElement>(`[data-app-link="${id}"]`)!;
   link.hidden = !poort;
+  // Niet gevonden: het blok verdwijnt van Overzicht. Waarom staat bij tandwiel › Koppelingen.
+  link.closest('section')?.classList.toggle('leeg', !poort);
   if (poort) link.href = appAdres(poort);
 }
 
@@ -967,7 +981,8 @@ function tekenStand() {
   const weer = staat.huis?.weer ?? o?.weer;
   const weerTekst = weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '';
   const datum = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-  tekst($('dagstart-label'), stand === 'ochtend' ? `${datum}${weerTekst ? ` · ${weerTekst}` : ''}` : 'Avond');
+  const uurNu = new Date().getHours();
+  tekst($('dagstart-label'), stand === 'ochtend' ? `${datum}${weerTekst ? ` · ${weerTekst}` : ''}` : uurNu >= 23 || uurNu < 5 ? 'Nacht' : 'Avond');
   tekst($('dagstart-titel'), begroeting());
   let zin: string;
   if (stand === 'ochtend') {

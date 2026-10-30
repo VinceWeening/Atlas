@@ -134,7 +134,11 @@ export function startOpdracht(opties: Opties) {
       // Herschreef de lokale AI de zin, dan zie je wat Atlas ervan maakte.
       zeg(data.begrepen ? `${data.tekst} (begrepen als “${data.begrepen}”)` : data.tekst, data.gedaan ? 'gedaan' : data.ai ? 'ai' : 'gewoon');
       if (gesproken && opties.hardop()) spreek(data.tekst);
-      if (data.gedaan) opties.ververs();
+      if (data.gedaan) {
+        opties.ververs();
+        // De voorbeelden volgen het huis: was de woonkamer net uitgezet, dan staat er nu "woonkamer aan".
+        setTimeout(tekenTips, 900);
+      }
       veld.value = '';
       if (data.scherm) {
         opties.naarScherm(data.scherm);
