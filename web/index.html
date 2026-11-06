@@ -20,9 +20,15 @@
 <body>
 <div class="app">
   <div class="lucht" id="lucht" aria-hidden="true"></div>
-  <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
 
-  <div class="stage">
+
+<a class="spring-link" href="#scherm-titel">Naar inhoud</a><aside class="zijbalk"><a class="merk" href="#" aria-label="Atlas, naar Thuis"><svg aria-hidden="true" viewBox="0 0 40 40" width="38" height="38" fill="none"><path d="m20 4 16 29H4L20 4Z" stroke="currentColor" stroke-width="1.4"/><path d="m20 15 7 13H13l7-13Z" fill="currentColor"/></svg><span>ATLAS<small>Jouw thuisbasis</small></span></a>      <nav class="segment schermen" aria-label="Schermen">
+        <button type="button" aria-label="Thuis" data-scherm="thuis" aria-keyshortcuts="1"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/></svg><span>Thuis</span></button>
+        <button type="button" aria-label="Overzicht" data-scherm="overzicht" aria-keyshortcuts="2"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Overzicht</span></button>
+        <button type="button" aria-label="Apparaten" data-scherm="apparaten" aria-keyshortcuts="3"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/></svg><span>Apparaten</span></button>
+        <button type="button" aria-label="Camera's" data-scherm="cameras" aria-keyshortcuts="4"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg><span>Camera's</span></button>
+      </nav><div class="zijbalk-voet"><span class="status-punt"></span><span>Huis · dag · overzicht</span></div></aside>
+  <main class="stage" id="inhoud">
     <header class="gl bovenbalk"><div class="gl-in balk-in">
       <section class="klok" aria-label="Tijd en weer">
         <svg class="ring" aria-hidden="true" viewBox="0 0 220 220">
@@ -35,12 +41,7 @@
         <p class="muted klein klok-regel"><span id="datum"></span> · <span id="weer"></span></p>
       </section>
 
-      <nav class="segment schermen" aria-label="Schermen">
-        <button type="button" data-scherm="thuis" aria-keyshortcuts="1">Thuis</button>
-        <button type="button" data-scherm="overzicht" aria-keyshortcuts="2">Overzicht</button>
-        <button type="button" data-scherm="apparaten" aria-keyshortcuts="3">Apparaten</button>
-        <button type="button" data-scherm="cameras" aria-keyshortcuts="4">Camera's</button>
-      </nav>
+
 
       <div class="balk-rechts">
         <button type="button" class="melding-status-knop" id="meldingen-knop" aria-label="Meldingsinstellingen openen"><span aria-hidden="true">◌</span><span id="meldingen-status">Meldingen</span></button>
@@ -53,6 +54,23 @@
       </div>
     </div></header>
 
+
+    <section class="scherm-intro" aria-labelledby="scherm-titel">
+      <div><p class="intro-label">JOUW THUISBASIS</p><h1 id="scherm-titel" tabindex="-1">Alles op zijn plek.</h1><p id="scherm-uitleg" class="muted">Je huis en je dag, met ruimte voor rust.</p></div>
+      <button type="button" class="verbinding" id="verbinding" aria-label="Koppelingen bekijken"><span class="status-punt"></span><span id="verbinding-tekst">Verbinding maken…</span></button>
+    </section>
+    <section class="huis-vak gl" aria-label="Je huis">
+      <div class="huis-kop"><div><span class="intro-label">MIJN HUIS</span><h2>Een blik op thuis</h2></div><span class="muted klein">Indicatieve indeling</span></div>
+      <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
+            <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
+        <div class="rail-knoppen" id="verdiepingen"></div>
+        <div class="segment modus" role="group" aria-label="Weergave van het huis">
+          <button type="button" data-modus="2d">2D</button>
+          <button type="button" data-modus="3d">3D</button>
+          <button type="button" data-modus="vrij" aria-label="Draaibaar 3D-model">Draai</button>
+        </div>
+      </nav>
+    </section>
     <!-- Thuis: links de dag, rechts de kamer en de camera. Op Overzicht verhuizen deze blokken naar de kolommen. -->
     <div class="links" id="plek-links">
       <!-- Ochtend- en avondstand: een rustige kaart bovenaan met wat er vandaag (of morgen) is. -->
@@ -97,6 +115,7 @@
 
       <section class="gl voordeur" aria-label="Camera" data-blok="camera"><div class="gl-in camera-paneel">
         <div class="camera">
+          <span id="camera-status" class="camera-beeld-status">Momentopname</span>
           <img id="camera-beeld" alt="" hidden>
           <p class="camera-leeg muted klein" id="camera-leeg">Geen beeld</p>
           <span class="lbl camera-naam" id="camera-naam">Camera</span>
@@ -112,14 +131,7 @@
         <button type="button" class="orb" id="spraak-orb" aria-label="Spreek een opdracht in" aria-keyshortcuts="Control+Space" title="Spreken (Ctrl+Spatie)"></button>
         <span class="lbl zacht" id="spraak-label">Tik en spreek</span>
       </div>
-      <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
-        <div class="rail-knoppen" id="verdiepingen"></div>
-        <div class="segment modus" role="group" aria-label="Weergave van het huis">
-          <button type="button" data-modus="2d">2D</button>
-          <button type="button" data-modus="3d">3D</button>
-          <button type="button" data-modus="vrij" aria-label="Draaibaar 3D-model">Draai</button>
-        </div>
-      </nav>
+
       <div class="gl pil dock" id="dock"><div class="gl-in segment dock-in">
         <div class="dock-deel" id="dock-favorieten" data-blok="favorieten"></div>
         <span class="dock-scheiding" id="dock-scheiding" aria-hidden="true"></span>
@@ -189,7 +201,7 @@
       <div class="opnames" id="opnames-lijst"></div>
     </section>
 
-  </div>
+  </main>
 
   <dialog class="gl instellingen camera-groot" id="opname" aria-labelledby="opname-titel"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="opname-titel"></h2><button type="button" class="knop zacht" id="opname-sluit">Sluiten</button></div>

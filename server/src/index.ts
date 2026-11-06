@@ -65,18 +65,24 @@ aanwezig.start();
 meldingen.isWeg = () => aanwezig.weg;
 
 const google = Google.uitOmgeving();
-app.log.info(google ? 'Google-client ingesteld.' : 'Geen GOOGLE_CLIENT_ID en GOOGLE_CLIENT_SECRET ingesteld, agenda en mail tonen voorbeeldgegevens.');
+// Alleen een volledig ongeconfigureerde installatie toont de voorbeeldagenda en -mail.
+const demo = () => !ha && !google?.gekoppeld;
+const onbekendWeer = { omschrijving: '', temperatuur: null };
+app.log.info(google ? 'Google-client ingesteld.' : ha ? 'Google niet ingesteld; agenda en mail zijn niet beschikbaar.' : 'Demostand: agenda en mail tonen voorbeeldgegevens.');
 
 app.get('/api/overzicht', async () => {
   const status = { ingesteld: !!google, gekoppeld: !!google?.gekoppeld };
-  if (!google?.gekoppeld) return { ...voorbeeld, voorbeeld: true, google: status };
+  if (!google?.gekoppeld) {
+    if (demo()) return { ...voorbeeld, voorbeeld: true, google: status };
+    return { voorbeeld: false, google: status, weer: onbekendWeer, agenda: [], morgen: '', mail: [], mailAantal: 0 };
+  }
   // Agenda en mail apart, zodat een fout in de een de ander niet meeneemt.
   const [afspraken, post] = await Promise.allSettled([google.afspraken(), google.mail()]);
   for (const r of [afspraken, post]) if (r.status === 'rejected') app.log.warn(r.reason);
   return {
     voorbeeld: false,
     google: status,
-    weer: voorbeeld.weer,
+    weer: onbekendWeer,
     agenda: afspraken.status === 'fulfilled' ? afspraken.value.vandaag : [],
     morgen: afspraken.status === 'fulfilled' ? afspraken.value.morgen : '',
     agendaFout: afspraken.status === 'rejected',
@@ -257,7 +263,8 @@ app.get('/api/energie', async (_request, reply) => {
 
 // Vertrekhulp: wanneer weg voor de volgende afspraak, en of het regent.
 async function afsprakenVandaag() {
-  if (google?.gekoppeld) return (await google.afspraken().catch(() => ({ vandaag: [] as Afspraak[], morgen: '' }))).vandaag;
+  if (google?.gekoppeld) return (await google.afspraken()).vandaag;
+  if (!demo()) return [];
   return voorbeeld.agenda.map((a): Afspraak => {
     // In het voorbeeld: de afspraken staan vandaag op hun tijd, en Sporten is een plek.
     const [u, m] = a.tijd.split(':').map(Number);
@@ -265,7 +272,16 @@ async function afsprakenVandaag() {
     return { ...a, kleur: null, begin: begin.toISOString(), plek: a.titel === 'Sporten' ? 'Sportschool Heiloo' : undefined };
   });
 }
-app.get('/api/vertrek', async () => ({ vertrek: volgendeVertrek(await afsprakenVandaag()), regen: await regen() }));
+app.get('/api/vertrek', async () => {
+  const [afspraken, buien] = await Promise.allSettled([afsprakenVandaag(), regen()]);
+  return {
+    vertrek: afspraken.status === 'fulfilled' ? volgendeVertrek(afspraken.value) : null,
+    regen: buien.status === 'fulfilled' ? buien.value : null,
+    voorbeeld: demo(),
+    agendaBeschikbaar: !!google?.gekoppeld || demo(),
+    agendaFout: afspraken.status === 'rejected',
+  };
+});
 
 /** Een kort overzicht van wat Atlas nu weet, voor de lokale AI bij een vrije vraag. Alleen wat er op de schermen ook staat. */
 async function watAtlasWeet() {
@@ -274,17 +290,23 @@ async function watAtlasWeet() {
     huis.energie(),
     huis.afval(),
     afsprakenVandaag(),
-    google?.gekoppeld ? google.mail() : Promise.resolve({ mail: voorbeeld.mail, aantal: voorbeeld.mail.length }),
+    google?.gekoppeld ? google.mail() : Promise.resolve(demo() ? { mail: voorbeeld.mail, aantal: voorbeeld.mail.length } : { mail: [], aantal: 0 }),
     regen(),
   ]);
   const regels = [`Nu: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.`];
-  if (afspraken.status === 'fulfilled') {
+  if (demo()) regels.push('Demostand: de huisgegevens, agenda en mail hieronder zijn uitsluitend voorbeelden, geen persoonlijke feiten. Benoem dit bij antwoorden over deze gegevens.');
+  else if (!ha) regels.push('Home Assistant is niet ingesteld. De huis-, energie- en afvalgegevens hieronder zijn voorbeelden; alleen de gekoppelde Google-agenda en mail zijn echt.');
+  const agendaBekend = !!google?.gekoppeld || demo();
+  if (!agendaBekend) regels.push('Google is niet gekoppeld. Agenda en belangrijke mail zijn onbekend; zeg niet dat er niets gepland is of geen mail is.');
+  if (agendaBekend && afspraken.status === 'fulfilled') {
     const a = afspraken.value;
     regels.push(a.length ? `Agenda vandaag: ${a.map((x) => `${x.tijd} ${x.titel}${x.plek ? ` (${x.plek.split(',')[0]})` : ''}`).join('; ')}.` : 'Agenda vandaag: niets.');
     const v = volgendeVertrek(a);
     if (v) regels.push(`Vertrekken voor ${v.titel} om ${new Date(v.om).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })} (${v.reistijd} minuten reizen).`);
   }
-  if (post.status === 'fulfilled') {
+  if (agendaBekend && afspraken.status === 'rejected') regels.push('Agenda vandaag: tijdelijk niet bereikbaar, afspraken en vertrektijden zijn onbekend.');
+  if (agendaBekend && post.status === 'rejected') regels.push('Belangrijke mail: tijdelijk niet bereikbaar, het aantal en de inhoud zijn onbekend.');
+  if (agendaBekend && post.status === 'fulfilled') {
     const p = post.value;
     regels.push(`Belangrijke mail: ${p.aantal}${p.mail.length ? `, waaronder ${p.mail.slice(0, 5).map((m) => `"${m.onderwerp}" van ${m.van}`).join('; ')}` : ''}.`);
   }
@@ -388,7 +410,7 @@ app.get('/api/status', async () => {
   });
   lijst.push(
     !google
-      ? { naam: 'Google', staat: 'uit', tekst: 'Niet ingesteld: agenda en mail zijn voorbeeld.' }
+      ? { naam: 'Google', staat: 'uit', tekst: demo() ? 'Demostand: agenda en mail zijn voorbeelden.' : 'Niet ingesteld: koppel Google voor je agenda en mail.' }
       : google.gekoppeld
         ? { naam: 'Google', staat: 'goed', tekst: 'Agenda en mail gekoppeld' }
         : { naam: 'Google', staat: 'let-op', tekst: 'Ingesteld maar nog niet gekoppeld (hieronder).' },

@@ -1,6 +1,8 @@
 // De schermen Apparaten (alles uit Home Assistant per ruimte) en Camera's (alle camera's tegelijk).
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
 import { meldFout, post } from './melding';
+import { maakCamerabeeld } from './camerabeeld';
+import { vervangMetFocus } from './dom';
 import { mediaBediening, mediaBezig, type MediaDelen } from './media';
 
 type Apparaat = {
@@ -101,6 +103,10 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   const zoek = pagina.querySelector<HTMLInputElement>('#apparaten-zoek')!;
   const filters = pagina.querySelector<HTMLElement>('#apparaten-filters')!;
   const lijst = pagina.querySelector<HTMLElement>('#apparaten-lijst')!;
+  const dataStatus = maak('p', 'muted klein');
+  dataStatus.setAttribute('role', 'status');
+  dataStatus.hidden = true;
+  lijst.before(dataStatus);
 
   for (const [id, naam] of FILTERS) {
     const knop = maak('button', undefined, naam);
@@ -118,6 +124,7 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
   });
 
   async function bedien(a: Apparaat, aan: boolean) {
+    if (!a.bereikbaar || staat.bezig.has(a.id)) return;
     staat.bezig.add(a.id);
     if (a.bediening === 'schakel') a.aan = aan; // meteen tonen, de volgende ronde bevestigt het
     teken();
@@ -174,6 +181,7 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     const knoppen = maak('div', 'rij-knoppen');
     const potlood = maak('button', 'icoon-knop');
     potlood.type = 'button';
+    potlood.dataset.focus = `${a.id}:naam`;
     potlood.innerHTML = POTLOOD;
     potlood.setAttribute('aria-label', `${a.naam} een andere naam geven`);
     potlood.title = 'Andere naam geven';
@@ -208,14 +216,16 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
       s.setAttribute('aria-checked', String(!!a.aan));
       s.setAttribute('aria-label', `${a.naam} ${a.aan ? 'uitzetten' : 'aanzetten'}`);
       s.setAttribute('aria-busy', String(staat.bezig.has(a.id)));
-      s.disabled = !a.bereikbaar || staat.bezig.has(a.id);
+      s.disabled = !a.bereikbaar;
+      s.setAttribute('aria-disabled', String(staat.bezig.has(a.id)));
       s.addEventListener('click', () => bedien(a, !a.aan));
       r.append(s);
     } else if (a.bediening === 'start') {
       const k = maak('button', 'knop zacht', 'Start');
       k.type = 'button';
       k.setAttribute('aria-label', `${a.naam} starten`);
-      k.disabled = staat.bezig.has(a.id);
+      k.setAttribute('aria-busy', String(staat.bezig.has(a.id)));
+      k.setAttribute('aria-disabled', String(staat.bezig.has(a.id)));
       k.addEventListener('click', () => bedien(a, true));
       r.append(k);
     }
@@ -224,6 +234,7 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
     // Tv's en speakers: afspelen, volume en bron onder de rij. Aan en uit blijft de schakelaar.
     const media = a.media && mediaBediening({ ...a, media: a.media }, () => setTimeout(laad, 400), false);
     if (media) r.append(media);
+    r.querySelectorAll<HTMLElement>('button, input, select').forEach((el, i) => el.dataset.focus = `${a.id}:bediening:${i}`);
     return r;
   }
 
@@ -257,18 +268,20 @@ export function maakApparaten(opVerandering: () => void, lijsten: Lijsten) {
         kaart.append(binnen);
         return kaart;
       });
-    lijst.replaceChildren(...(kaarten.length ? kaarten : [maak('p', 'muted', 'Niets gevonden.')]));
+    vervangMetFocus(lijst, ...(kaarten.length ? kaarten : [maak('p', 'muted', 'Niets gevonden.')]));
   }
 
   async function laad() {
     try {
-      const antwoord = await fetch('/api/apparaten');
+      const antwoord = await fetch('/api/apparaten', { signal: AbortSignal.timeout(12_000) });
       if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
       staat.data = await antwoord.json();
       staat.fout = false;
     } catch {
       staat.fout = true;
     }
+    dataStatus.hidden = !staat.fout;
+    dataStatus.textContent = 'Niet bijgewerkt: je ziet de laatst bekende apparaatstanden. Atlas probeert het opnieuw.';
     // Niet opnieuw tekenen terwijl iemand een schakelaar indrukt of een naam aan het typen is.
     const kiest = lijst.contains(document.activeElement) && document.activeElement?.matches('select');
     if (!staat.bezig.size && !schuiftNu() && !mediaBezig() && !kiest && !staat.bewerkt) teken();
@@ -294,53 +307,85 @@ export function maakCameras() {
   const grootBeeld = document.getElementById('camera-groot-beeld') as HTMLImageElement;
   const grootNaam = document.getElementById('camera-groot-naam')!;
   let cameras: Camera[] = [];
+  let gekozen: string | null = null;
   let open: Camera | null = null;
+  const consoleVak = maak('div', 'camera-console');
+  const hoofd = maak('section', 'gl camera-hoofd');
+  const kop = maak('div', 'kop');
+  const titel = maak('h2', 'kamer-naam', 'Camera');
+  const vergroten = maak('button', 'knop zacht', 'Vergroten');
+  vergroten.type = 'button';
+  kop.append(titel, vergroten);
+  const grootKnop = maak('button', 'camera-hoofd-beeld');
+  grootKnop.type = 'button';
+  const hoofdBeeld = maak('img');
+  const leeg = maak('span', 'camera-hoofd-leeg muted klein');
+  grootKnop.append(hoofdBeeld, leeg);
+  const status = maak('p', 'camera-beeld-status');
+  hoofd.append(kop, grootKnop, status);
+  const keuzes = maak('nav', 'camera-keuzes');
+  keuzes.setAttribute('aria-label', 'Kies een camera');
+  consoleVak.append(hoofd, keuzes);
+  const hoofdLader = maakCamerabeeld(hoofdBeeld, status, leeg);
+  const grootStatus = maak('p', 'camera-beeld-status');
+  const beeldVak = maak('div', 'camera-groot-vak');
+  grootBeeld.replaceWith(beeldVak);
+  beeldVak.append(grootBeeld, grootStatus);
+  const grootLader = maakCamerabeeld(grootBeeld, grootStatus);
 
-  const adres = (c: Camera) => `/api/camera/${encodeURIComponent(c.id)}?t=${Date.now()}`;
-
-  function zet(cameraLijst: Camera[]) {
-    const sleutel = cameraLijst.map((c) => c.id).join();
-    if (sleutel === cameras.map((c) => c.id).join()) return;
-    cameras = cameraLijst;
-    lijst.replaceChildren(
-      ...(cameras.length
-        ? cameras.map((c) => {
-            const tegel = maak('button', 'gl camera-tegel');
-            tegel.type = 'button';
-            tegel.dataset.camera = c.id;
-            tegel.setAttribute('aria-label', `${c.naam} groot bekijken`);
-            const beeld = maak('img');
-            beeld.alt = `Camerabeeld ${c.naam}`;
-            beeld.addEventListener('error', () => beeld.classList.add('leeg'));
-            beeld.addEventListener('load', () => beeld.classList.remove('leeg'));
-            // Zonder beeld een rustige tekst in plaats van een leeg vlak.
-            tegel.append(beeld, maak('span', 'camera-tegel-leeg muted klein', 'Geen beeld'), maak('span', 'lbl camera-tegel-naam', c.naam));
-            tegel.addEventListener('click', () => {
-              open = c;
-              grootNaam.textContent = c.naam;
-              grootBeeld.src = adres(c);
-              grootBeeld.alt = `Camerabeeld ${c.naam}`;
-              optiesVak.replaceChildren(maak('p', 'muted klein', 'Instellingen laden…'));
-              groot.showModal();
-              laadOpties(c);
-            });
-            return tegel;
-          })
-        : [maak('p', 'muted', 'Geen camera’s gevonden in Home Assistant.')]),
-    );
-    ververs();
-  }
-
-  /** Nieuwe beelden halen; alleen voor wat er in beeld is. */
-  function ververs() {
-    for (const c of cameras) {
-      const img = lijst.querySelector<HTMLImageElement>(`[data-camera="${CSS.escape(c.id)}"] img`);
-      if (img) img.src = adres(c);
+  function kies(id: string) {
+    const camera = cameras.find((c) => c.id === id);
+    if (!camera) return;
+    gekozen = id;
+    titel.textContent = camera.naam;
+    grootKnop.setAttribute('aria-label', `${camera.naam} vergroten`);
+    hoofdLader.zet(camera);
+    for (const knop of keuzes.querySelectorAll<HTMLElement>('[data-camera]')) {
+      knop.setAttribute('aria-pressed', String(knop.dataset.camera === id));
     }
   }
+  function openGroot() {
+    const camera = cameras.find((c) => c.id === gekozen);
+    if (!camera) return;
+    open = camera;
+    grootNaam.textContent = camera.naam;
+    grootLader.zet(camera);
+    optiesVak.replaceChildren(maak('p', 'muted klein', 'Instellingen laden…'));
+    groot.showModal();
+    laadOpties(camera);
+  }
+  grootKnop.addEventListener('click', openGroot);
+  vergroten.addEventListener('click', openGroot);
+  groot.addEventListener('close', () => grootLader.zet(null));
 
+  function zet(cameraLijst: Camera[]) {
+    if (JSON.stringify(cameraLijst.map(({id,naam}) => [id,naam])) === JSON.stringify(cameras.map(({id,naam}) => [id,naam])) && lijst.childElementCount) return;
+    cameras = cameraLijst;
+    if (open && !cameras.some((c) => c.id === open!.id)) groot.close();
+    if (!cameras.length) {
+      hoofdLader.zet(null);
+      lijst.replaceChildren(maak('p', 'muted', 'Geen camera’s gevonden in Home Assistant.'));
+      return;
+    }
+    if (!lijst.contains(consoleVak)) lijst.replaceChildren(consoleVak);
+    vervangMetFocus(keuzes, ...cameras.map((camera) => {
+      const knop = maak('button', 'camera-keuze');
+      knop.type = 'button';
+      knop.dataset.camera = camera.id;
+      knop.dataset.focus = camera.id;
+      knop.append(maak('strong', undefined, camera.naam), maak('span', undefined, 'Bekijk camera'));
+      knop.addEventListener('click', () => kies(camera.id));
+      return knop;
+    }));
+    kies(cameras.some((c) => c.id === gekozen) ? gekozen! : cameras[0].id);
+  }
+
+  function ververs() {
+    if (document.visibilityState !== 'visible' || document.getElementById('pagina-cameras')!.hidden) return;
+    hoofdLader.ververs();
+  }
   setInterval(() => {
-    if (open && groot.open) grootBeeld.src = adres(open);
+    if (open && groot.open && document.visibilityState === 'visible') grootLader.ververs();
   }, 2000);
 
   // Instellingen van de camera zelf naast het grote beeld: IR-licht, nachtzicht, sirene, Frigate-detectie en zo.
