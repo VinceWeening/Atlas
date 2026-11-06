@@ -204,3 +204,15 @@ npm run dev                     # alleen het scherm, met live herladen (server a
 ```
 
 De Windows-app bouw je op Windows met `cd desktop && npm install && npm run build` (Rust en Node nodig).
+
+## Vernieuwde cockpit
+
+Op de pc staat een compacte navigatieconsole bovenaan; op de telefoon staat de navigatie onderin. Thuis heeft een centraal woningmodel met cyaan glaswanden, warme lichtvlakken en subtiele HUD-ringen. Dagpanelen staan links, kamerbediening en camera rechts. Op smalle schermen stapelen de panelen. Apparaten gebruikt een raster met grote aanraakvlakken. De bestaande keuzes voor blokken, startscherm, avondstand en beweging blijven gelden.
+
+De ontwerpkeuzes en themarollen staan in [het ontwerpdocument](docs/design.md). De rustige stand behoudt dezelfde cockpit, met minder atmosferische effecten. Bewegingsvoorkeuren gelden ook voor de nieuwe vormgeving.
+
+Camera’s hebben een groot geselecteerd beeld en een camerakeuze. Het hele bronbeeld blijft zichtbaar. **Momentopname** en de tijd van de laatste succesvolle opname maken duidelijk hoe actueel het beeld is. Een mislukte verversing behoudt het vorige beeld van dezelfde camera; wisselen naar een andere camera wist het oude beeld direct.
+
+De verbindingsknop opent Koppelingen. Een storing toont dat gegevens tijdelijk verouderd kunnen zijn. Bij een echt aangesloten huis toont een ongekoppelde Google-agenda een koppelactie; voorbeeldafspraken en voorbeeldmail worden dan ook niet aan de vertrekhulp of de AI gegeven. Een installatie zonder koppelingen blijft een herkenbare demo.
+
+`npm test` bevat ook integratietests voor echte/demo/onbekende gegevens en tests voor toetsenbordfocus bij verversen, zonder echte diensten of apparaten te bedienen.

@@ -1,4 +1,7 @@
 import './styles.css';
+import './overhaul.css';
+import { vervangMetFocus } from './dom';
+import { maakCamerabeeld } from './camerabeeld';
 import { lagen, type Ruimte } from './huis';
 import { instellingen, type Instellingen } from './instellingen';
 import { lampSchuiven, schuiftNu, type LampDelen } from './lamp';
@@ -13,7 +16,7 @@ import { maakMediaBlok } from './media';
 
 type Overzicht = {
   voorbeeld: boolean;
-  weer: { omschrijving: string; temperatuur: number };
+  weer: { omschrijving: string; temperatuur: number | null };
   agenda: { tijd: string; titel: string; detail: string; kleur?: string | null }[];
   morgen: string;
   mail: { van: string; onderwerp: string; stukje?: string; tijd?: string | null; link?: string }[];
@@ -59,6 +62,9 @@ const staat = {
   huis: null as Huis | null,
   overzicht: null as Overzicht | null,
   huisFout: false,
+  overzichtFout: false,
+  huisBijgewerkt: 0,
+  overzichtBijgewerkt: 0,
   inst: null as Instellingen | null,
   /** Alle apparaten uit Home Assistant, voor de favorieten en de knoppen onderin. */
   apparaten: null as Apparaat[] | null,
@@ -120,6 +126,7 @@ function tekenHuis3d() {
   huis.classList.add('vrij');
   if (huis.firstChild !== huis3dVak) huis.replaceChildren(huis3dVak);
   const zet = () => {
+    if (staat.scherm !== 'thuis' || (staat.inst?.blokken.huis === false && !staat.huisVoor)) { huis3d?.stop(); return; }
     huis3d!.beweging(!rustig());
     huis3d!.zet({ gekozen: staat.gekozen, verdieping: staat.verdieping });
     huis3d!.start();
@@ -220,9 +227,12 @@ function wisselPlat(oud: HTMLElement, nieuw: HTMLElement, omhoog: boolean) {
 
 function tekenHuis() {
   const huis = $('huis');
-  if (staat.modus === 'vrij') return tekenHuis3d();
+  if (staat.modus === 'vrij') { delete huis.dataset.sleutel; return tekenHuis3d(); }
   huis.classList.remove('vrij');
   huis3d?.stop();
+  const sleutel = JSON.stringify([staat.modus, staat.verdieping, staat.gekozen, staat.huis?.kamers]);
+  if (huis.dataset.sleutel === sleutel) return;
+  huis.dataset.sleutel = sleutel;
   const driedee = staat.modus === '3d';
   // In 3D blijft het hele huis staan; een gekozen verdieping komt in focus en de rest blijft vaag zichtbaar. In 2D zie je
   // alleen de gekozen verdieping (of de begane grond bij Alles).
@@ -251,16 +261,11 @@ function tekenHuis() {
     // Verdiepingen boven de gekozen schuiven wat omhoog, zodat je van bovenaf goed in de gekozen verdieping kijkt.
     const z = gestapeld ? laag.z + (focus >= 0 && i > focus ? 90 : 0) : 0;
     vlak.style.transform = `translateZ(${z}px)`;
-    vlak.style.boxShadow = i === focus
-      ? '0 0 0 2px #D6EDFF, 0 0 40px rgba(111,168,255,0.35), 0 50px 80px -20px rgba(0,0,0,0.7)'
-      : gestapeld
-        ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
-        : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
     // Op de naam van een verdieping klikken gaat naar die verdieping, en nog een keer klikken terug naar alles.
     const naam = maak('button', 'lbl laag-naam', laag.label);
     naam.type = 'button';
     naam.addEventListener('click', () => kiesVerdieping(staat.verdieping === laag.id ? 'alle' : laag.id));
-    if (staat.verdieping === laag.id) naam.style.color = '#D6EDFF';
+    if (staat.verdieping === laag.id) naam.style.color = 'var(--ijs-licht)';
     vlak.append(naam);
 
     for (const r of laag.ruimtes) {
@@ -270,6 +275,7 @@ function tekenHuis() {
       knop.type = 'button';
       Object.assign(knop.style, { left: `${r.l}%`, top: `${r.t}%`, width: `${r.w}%`, height: `${r.h}%` });
       knop.setAttribute('aria-pressed', String(r.id === staat.gekozen));
+      knop.dataset.focus = r.id;
       knop.setAttribute('aria-label', `${laag.naam}, ${r.naam}${aan ? ', licht aan' : ''}`);
       const label = maak('span');
       label.style.cssText = 'display:flex;flex-direction:column;gap:2px';
@@ -299,7 +305,7 @@ function tekenHuis() {
     }
     gebouw.append(vlak);
   }
-  huis.replaceChildren(gebouw);
+  vervangMetFocus(huis, gebouw);
   if (vorig) beweegStapel(gebouw, vorig, focus);
   else if (oud && vorigePlat && vorigePlat !== getoond) {
     const index = (id: string) => lagen.findIndex((l) => l.id === id);
@@ -316,10 +322,11 @@ function kiesVerdieping(id: string) {
 
 function tekenKnoppen() {
   const opties = VERDIEPINGEN.map((id) => ({ id, naam: id === 'alle' ? 'Alles' : lagen.find((l) => l.id === id)!.naam }));
-  $('verdiepingen').replaceChildren(
+  vervangMetFocus($('verdiepingen'),
     ...opties.map((o) => {
       const knop = maak('button', 'rail-knop');
       knop.type = 'button';
+      knop.dataset.focus = o.id;
       knop.setAttribute('aria-pressed', String(staat.verdieping === o.id));
       knop.append(maak('span', 'rail-stip'), maak('span', 'rail-naam', o.naam));
       knop.addEventListener('click', () => kiesVerdieping(o.id));
@@ -332,6 +339,7 @@ function tekenKnoppen() {
 }
 
 async function zetLamp(lamp: Lamp, aan: boolean) {
+  if (staat.bezig.has(lamp.id) || !lamp.bereikbaar) return;
   lamp.aan = aan; // meteen tonen, de volgende ronde van Home Assistant bevestigt het
   staat.bezig.add(lamp.id);
   tekenAlles();
@@ -356,16 +364,21 @@ function lampRij(lamp: Lamp) {
   info.append(namen);
   // Lampen krijgen een warme schakelaar; warm betekent in Atlas altijd "licht aan".
   const schakelaar = maak('button', 'schakelaar warm');
+  schakelaar.dataset.focus = lamp.id;
   schakelaar.type = 'button';
   schakelaar.setAttribute('role', 'switch');
   schakelaar.setAttribute('aria-checked', String(lamp.aan));
   schakelaar.setAttribute('aria-label', `${lamp.naam} ${lamp.aan ? 'uitzetten' : 'aanzetten'}`);
   schakelaar.setAttribute('aria-busy', String(staat.bezig.has(lamp.id)));
-  schakelaar.disabled = !lamp.bereikbaar || staat.bezig.has(lamp.id);
+  schakelaar.disabled = !lamp.bereikbaar;
+  schakelaar.setAttribute('aria-disabled', String(staat.bezig.has(lamp.id)));
   schakelaar.addEventListener('click', () => zetLamp(lamp, !lamp.aan));
   rij.append(info, schakelaar);
   const schuiven = lampSchuiven(lamp, () => setTimeout(laadHuis, 400));
-  if (schuiven) rij.append(schuiven);
+  if (schuiven) {
+    schuiven.querySelectorAll<HTMLInputElement>('input').forEach((input, i) => input.dataset.focus = `${lamp.id}:schuif:${i}`);
+    rij.append(schuiven);
+  }
   return rij;
 }
 
@@ -419,7 +432,7 @@ function tekenKamer() {
   } else if (!(schuiftNu() && lijst.dataset.kamer === staat.kamer)) {
     // Niet opnieuw opbouwen terwijl er aan een schuifje getrokken wordt.
     lijst.dataset.kamer = staat.kamer ?? '';
-    lijst.replaceChildren(...lampen.map(lampRij));
+    vervangMetFocus(lijst, ...lampen.map(lampRij));
   }
 }
 
@@ -438,6 +451,7 @@ function tekenHud() {
 }
 
 async function bedienApparaat(a: Apparaat, aan: boolean) {
+  if (staat.bezig.has(a.id) || !a.bereikbaar) return;
   if (a.bediening === 'schakel') a.aan = aan; // meteen tonen
   staat.bezig.add(a.id);
   tekenFavorieten();
@@ -459,14 +473,17 @@ async function bedienApparaat(a: Apparaat, aan: boolean) {
 }
 
 /** Knop in het dock onderin. Een brandende lamp of aan staande schakelaar licht warm op. */
-function dockKnop(naam: string, aan: boolean | null, klik: () => void, opties: { bereikbaar?: boolean; lamp?: boolean } = {}) {
+function dockKnop(naam: string, aan: boolean | null, klik: () => void, opties: { bereikbaar?: boolean; lamp?: boolean; sleutel?: string; bezig?: boolean } = {}) {
   const knop = maak('button', 'dock-knop' + (aan ? ' aan' : ''));
   knop.type = 'button';
   if (opties.lamp) knop.append(maak('span', 'dock-lamp'));
   knop.append(naam);
+  knop.dataset.focus = opties.sleutel ?? naam;
   if (aan != null) knop.setAttribute('aria-pressed', String(aan));
   knop.disabled = opties.bereikbaar === false;
-  knop.addEventListener('click', klik);
+  knop.setAttribute('aria-busy', String(!!opties.bezig));
+  knop.setAttribute('aria-disabled', String(!!opties.bezig));
+  knop.addEventListener('click', () => { if (!opties.bezig) klik(); });
   return knop;
 }
 
@@ -488,7 +505,7 @@ function tekenScenes() {
         const knop = dockKnop(a.naam, a.bediening === 'schakel' ? !!a.aan : null, () => {
           if (a.bediening === 'start') flits(knop);
           bedienApparaat(a, a.bediening === 'start' ? true : !a.aan);
-        }, { bereikbaar: a.bereikbaar && !staat.bezig.has(a.id) });
+        }, { bereikbaar: a.bereikbaar, bezig: staat.bezig.has(a.id), sleutel: a.id });
         return knop;
       });
   } else {
@@ -502,11 +519,11 @@ function tekenScenes() {
           meldFout(`${sc.naam} lukte niet`);
         }
         setTimeout(laadHuis, 800);
-      });
+      }, { sleutel: sc.id });
       return knop;
     });
   }
-  $('scenes').replaceChildren(...knoppen);
+  vervangMetFocus($('scenes'), ...knoppen);
   tekenDock();
 }
 
@@ -516,29 +533,36 @@ function tekenFavorieten() {
   const lijst = staat.apparaten ? ids.map((id) => staat.apparaten!.find((a) => a.id === id)).filter((a): a is Apparaat => !!a) : [];
   // Zonder favorieten verdwijnt de kaart; een ster bij Apparaten zet ze erop.
   $('favorieten-blok').classList.toggle('leeg', lijst.length === 0);
-  $('dock-favorieten').replaceChildren(
+  vervangMetFocus($('dock-favorieten'),
     ...lijst.map((a) =>
       dockKnop(a.naam, a.bediening === 'schakel' ? !!a.aan : null, () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan), {
-        bereikbaar: a.bereikbaar && !staat.bezig.has(a.id),
+        bereikbaar: a.bereikbaar, bezig: staat.bezig.has(a.id),
         lamp: a.soort === 'light',
+        sleutel: a.id,
       }),
     ),
   );
   tekenDock();
   if (schuiftNu() && $('favorieten').querySelector('input[type=range]')) return;
-  $('favorieten').replaceChildren(
+  vervangMetFocus($('favorieten'),
     ...lijst.map((a) => {
       const vak = maak('div', 'favoriet-vak' + (a.aan ? ' aan' : ''));
       const tegel = maak('button', 'favoriet' + (a.aan ? ' aan' : ''));
       tegel.type = 'button';
-      tegel.disabled = !a.bereikbaar || staat.bezig.has(a.id);
+      tegel.dataset.focus = a.id;
+      tegel.disabled = !a.bereikbaar;
+      tegel.setAttribute('aria-busy', String(staat.bezig.has(a.id)));
+      tegel.setAttribute('aria-disabled', String(staat.bezig.has(a.id)));
       if (a.bediening === 'schakel') tegel.setAttribute('aria-pressed', String(!!a.aan));
       tegel.append(maak('span', 'favoriet-lamp'), maak('strong', undefined, a.naam), maak('span', 'muted klein', a.bereikbaar ? a.tekst || 'Starten' : 'Niet bereikbaar'));
       tegel.addEventListener('click', () => bedienApparaat(a, a.bediening === 'start' ? true : !a.aan));
       vak.append(tegel);
       // Bij een brandende dimbare lamp meteen een schuifje voor de helderheid.
       const schuiven = a.aan ? lampSchuiven({ ...a, lamp: a.lamp && { ...a.lamp, kleurtemp: null } }, () => setTimeout(laadApparaten, 400)) : null;
-      if (schuiven) vak.append(schuiven);
+      if (schuiven) {
+        schuiven.querySelectorAll<HTMLInputElement>('input').forEach((input, i) => input.dataset.focus = `${a.id}:schuif:${i}`);
+        vak.append(schuiven);
+      }
       return vak;
     }),
   );
@@ -606,9 +630,7 @@ async function hernoem(id: string, naam: string) {
   }
 }
 
-let cameraGetoond = '';
-/** Tijd van het laatste beeld dat wel binnenkwam, zodat een haperende camera een oud beeld met tijd laat zien. */
-let laatsteBeeld: number | null = null;
+const thuisBeeld = maakCamerabeeld($<HTMLImageElement>('camera-beeld'), $('camera-status'), $('camera-leeg'));
 function tekenCamera(verversen = false) {
   const cameras = staat.huis?.cameras ?? [];
   const camera = cameras[staat.camera % Math.max(cameras.length, 1)];
@@ -617,16 +639,8 @@ function tekenCamera(verversen = false) {
   tekst(wissel, `${(staat.camera % Math.max(cameras.length, 1)) + 1}/${cameras.length} ›`);
   wissel.setAttribute('aria-label', 'Volgende camera');
   tekst($('camera-naam'), camera?.naam ?? 'Camera');
-  const beeld = $<HTMLImageElement>('camera-beeld');
-  if (!camera || staat.huis?.bron !== 'home-assistant') {
-    beeld.hidden = true;
-    tekst($('camera-leeg'), !camera ? 'Geen camera gevonden' : 'Voorbeeld, geen camerabeeld');
-  } else if (verversen || cameraGetoond !== camera.id) {
-    if (cameraGetoond !== camera.id) laatsteBeeld = null;
-    cameraGetoond = camera.id;
-    beeld.alt = `Camerabeeld ${camera.naam}`;
-    laadBeeld(`/api/camera/${encodeURIComponent(camera.id)}?t=${Date.now()}`);
-  }
+  thuisBeeld.zet(staat.huis?.bron === 'home-assistant' ? camera ?? null : null);
+  if (verversen) thuisBeeld.ververs();
   const beweging = $('beweging');
   beweging.parentElement!.hidden = !camera?.beweging;
   if (camera?.beweging) tekst(beweging, `Beweging om ${uur(camera.beweging)}`);
@@ -737,6 +751,7 @@ function pasToe() {
   // Bij een ander scherm komen de panelen kort na elkaar zacht binnen.
   if (app.getAttribute('data-scherm') !== staat.scherm) {
     app.setAttribute('data-scherm', staat.scherm);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     app.classList.remove('wissel');
     void (app as HTMLElement).offsetWidth;
     app.classList.add('wissel');
@@ -756,10 +771,20 @@ function pasToe() {
     cameraScherm.laadOpnames();
   }
   app.classList.toggle('huis-achter', achter);
+  if (achter) huis3d?.stop();
+  else if (staat.modus === 'vrij') tekenHuis3d();
   // De huisknop staat er alleen als het huis uit staat: dan haal je het ermee naar voren.
   $('huis-knop').hidden = !huisUit || pagina || overzicht;
   $('huis-knop').setAttribute('aria-pressed', String(!achter));
   $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
+  const schermInfo = {
+    thuis: ['Huisoverzicht', 'Ruimtes, verlichting en zicht op thuis.'],
+    overzicht: ['Jouw overzicht', 'Je dag, huis en media bij elkaar.'],
+    apparaten: ['Apparaten', 'Bedien je huis per ruimte.'],
+    cameras: ["Camera’s", 'Kies een camera of bekijk een opname.'],
+  }[staat.scherm];
+  tekst($('scherm-titel'), schermInfo[0]);
+  tekst($('scherm-uitleg'), schermInfo[1]);
   document.title = `Atlas · ${{ thuis: 'Thuis', overzicht: 'Overzicht', apparaten: 'Apparaten', cameras: "Camera's" }[staat.scherm]}`;
   document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => {
     const gekozen = k.dataset.scherm === staat.scherm;
@@ -1137,6 +1162,9 @@ function tekenStand() {
     const buiten = staat.inst?.blokken.afval === false ? [] : staat.afval.filter((a) => a.datum === morgen).map((a) => a.naam);
     if (buiten.length) zin += ` Morgen ${buiten.join(' en ')} aan de straat.`;
   }
+  if (!o || staat.overzichtFout || o.agendaFout) zin = 'Je agenda is tijdelijk niet beschikbaar.';
+  else if (!o.voorbeeld && !o.google?.gekoppeld) zin = 'Koppel Google om hier je afspraken te zien.';
+  if (staat.huisFout && stand === 'avond') zin += ' De huisstatus is tijdelijk niet beschikbaar.';
   tekst($('dagstart-tekst'), zin);
   tekenVertrek();
 }
@@ -1268,11 +1296,47 @@ function lijstKnop(id: string, totaal: number, limiet: number) {
   });
   return [k];
 }
+function openKoppelingen() {
+  try { localStorage.setItem('atlas-inst-tab', 'koppelingen'); } catch { /* Opslag kan uitstaan. */ }
+  $('tandwiel').click();
+}
+$('verbinding').addEventListener('click', openKoppelingen);
+document.querySelector('.merk')!.addEventListener('click', (e) => {
+  e.preventDefault(); staat.scherm = 'thuis'; pasToe();
+});
+function tekenVerbinding() {
+  const fout = staat.huisFout || staat.overzichtFout;
+  const tijd = staat.huisBijgewerkt ? uur(new Date(staat.huisBijgewerkt).toISOString()) : '';
+  const demo = staat.huis?.bron === 'voorbeeld';
+  const waarde = fout ? `Verbinding onderbroken${tijd ? ` · huis bijgewerkt ${tijd}` : ''}`
+    : demo ? 'Demoweergave · voorbeeldhuis'
+    : !staat.huis ? 'Verbinding maken…'
+    : !staat.overzicht ? 'Agenda laden…'
+    : !staat.overzicht.google?.gekoppeld ? 'Huis verbonden · Google koppelen'
+    : staat.overzicht.agendaFout || staat.overzicht.mailFout ? 'Huis verbonden · Google controleren'
+    : 'Alles bijgewerkt';
+  const knop = $('verbinding');
+  knop.dataset.staat = fout ? 'fout' : demo ? 'demo' : 'goed';
+  tekst($('verbinding-tekst'), waarde);
+  knop.title = 'Bekijk de status van je koppelingen';
+}
+function koppelKaart(naam: string) {
+  const kaart = maak('div', 'koppel-kaart');
+  kaart.append(maak('strong', undefined, `${naam} nog niet gekoppeld`), maak('p', 'muted klein', 'Je eigen gegevens verschijnen zodra je Google koppelt.'));
+  const knop = maak('button', 'knop zacht', 'Google koppelen');
+  knop.type = 'button'; knop.addEventListener('click', openKoppelingen); kaart.append(knop);
+  return kaart;
+}
 function tekenOverzicht(o: Overzicht) {
+  if (!o.voorbeeld && !o.google?.gekoppeld) {
+    tekst($('aantal-afspraken'), ''); tekst($('mail-aantal'), ''); tekst($('morgen'), '');
+    vervangMetFocus($('agenda'), koppelKaart('Agenda')); vervangMetFocus($('mail'), koppelKaart('Mail'));
+    return;
+  }
   const agendaMax = staat.inst?.weergave.agendaAantal ?? 3;
   const mailMax = staat.inst?.weergave.mailAantal ?? 3;
   tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
-  $('agenda').replaceChildren(
+  vervangMetFocus($('agenda'),
     ...(o.agenda.length === 0 && !o.agendaFout ? [maak('p', 'muted klein', 'Niets meer vandaag.')] : []),
     ...(o.agendaFout ? [maak('p', 'muted klein', 'Je agenda is tijdelijk niet bereikbaar.')] : []),
     ...o.agenda.slice(0, lijstenOpen.has('agenda') ? undefined : agendaMax).map((a) => {
@@ -1285,10 +1349,10 @@ function tekenOverzicht(o: Overzicht) {
     }),
   );
   $('agenda').append(...lijstKnop('agenda', o.agenda.length, agendaMax));
-  tekst($('morgen'), o.morgen ? `Morgen ${o.morgen}` : 'Morgen niets gepland');
+  tekst($('morgen'), o.agendaFout || staat.overzichtFout ? 'Morgen nog niet beschikbaar' : o.morgen ? `Morgen ${o.morgen}` : 'Morgen niets gepland');
   const aantal = o.mailAantal ?? o.mail.length;
   tekst($('mail-aantal'), o.mailFout ? 'niet bereikbaar' : aantalTekst(o));
-  $('mail').replaceChildren(
+  vervangMetFocus($('mail'),
     ...(o.mail.length === 0 && !o.mailFout ? [maak('p', 'muted klein', 'Geen belangrijke mail. Lekker rustig.')] : []),
     ...(o.mailFout ? [maak('p', 'muted klein', 'Je mail is tijdelijk niet bereikbaar.')] : []),
     ...o.mail.slice(0, lijstenOpen.has('mail') ? undefined : mailMax).map((m) => {
@@ -1315,34 +1379,48 @@ function tekenOverzicht(o: Overzicht) {
 
 async function laadOverzicht() {
   try {
-    const antwoord = await fetch('/api/overzicht');
+    const antwoord = await fetch('/api/overzicht', { signal: AbortSignal.timeout(12_000) });
     if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
     staat.overzicht = await antwoord.json();
+    staat.overzichtFout = false;
+    staat.overzichtBijgewerkt = Date.now();
     tekenOverzicht(staat.overzicht!);
     tekenStand();
     tekenWeer();
     tekenOpmerking();
   } catch (fout) {
     console.error('Overzicht laden mislukt', fout);
+    staat.overzichtFout = true;
+    tekst($('aantal-afspraken'), 'Tijdelijk niet bereikbaar');
+    tekst($('mail-aantal'), 'Tijdelijk niet bereikbaar');
+    if (!staat.overzicht) {
+      vervangMetFocus($('agenda'),maak('p', 'muted', 'Je agenda laden lukt niet. Atlas probeert het opnieuw.'));
+      vervangMetFocus($('mail'),maak('p', 'muted', 'Je mail laden lukt niet. Atlas probeert het opnieuw.'));
+    }
+    tekenStand();
   }
+  tekenVerbinding();
 }
 
 let eersteKeer = true;
 async function laadHuis() {
   try {
-    const antwoord = await fetch('/api/huis');
+    const antwoord = await fetch('/api/huis', { signal: AbortSignal.timeout(12_000) });
     if (!antwoord.ok) throw new Error(`Server gaf ${antwoord.status}`);
     staat.huis = await antwoord.json();
     staat.huisFout = false;
+    staat.huisBijgewerkt = Date.now();
     if (eersteKeer) {
       eersteKeer = false;
       const ruimte = lagen.flatMap((l) => l.ruimtes).find((r) => r.id === staat.gekozen);
-      staat.kamer = (ruimte && kamerBij(ruimte)?.id) ?? null;
+      staat.kamer = (ruimte && kamerBij(ruimte)?.id) ?? staat.huis?.kamers.find((k) => k.lampen.some((l) => l.aan))?.id ?? staat.huis?.kamers.find((k) => k.lampen.length)?.id ?? null;
+      staat.gekozen = staat.kamer ? ruimteBij(staat.kamer)?.id ?? null : null;
     }
   } catch (fout) {
     console.error('Huis laden mislukt', fout);
     staat.huisFout = true;
   }
+  tekenVerbinding();
   tekenAlles();
   if (staat.scherm === 'cameras') cameraScherm.zet(staat.huis?.cameras ?? []);
 }
@@ -1387,37 +1465,6 @@ $('camera-wissel').addEventListener('click', () => {
   staat.camera += 1;
   tekenCamera();
 });
-/**
- * Een nieuw camerabeeld eerst buiten beeld laden en pas wisselen als het binnen is, zodat het beeld niet knippert.
- * Lukt het niet, dan blijft het vorige staan met de tijd erbij; is er nog nooit een beeld geweest, dan een rustige tekst
- * in plaats van een leeg vlak.
- */
-let gevraagd = '';
-function laadBeeld(adres: string) {
-  gevraagd = adres;
-  const voorlader = new Image();
-  voorlader.addEventListener('load', () => {
-    // Intussen naar een andere camera gewisseld: dit beeld is niet meer nodig.
-    if (adres !== gevraagd) return;
-    const beeld = $<HTMLImageElement>('camera-beeld');
-    beeld.src = adres;
-    beeld.hidden = false;
-    laatsteBeeld = Date.now();
-    $('camera-leeg').hidden = true;
-  });
-  voorlader.addEventListener('error', () => adres === gevraagd && beeldMislukt());
-  voorlader.src = adres;
-}
-function beeldMislukt() {
-  const beeld = $<HTMLImageElement>('camera-beeld');
-  const leeg = $('camera-leeg');
-  leeg.hidden = false;
-  if (laatsteBeeld == null) {
-    beeld.hidden = true;
-    tekst(leeg, 'Geen beeld van deze camera');
-  } else tekst(leeg, `Laatste beeld ${new Date(laatsteBeeld).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`);
-}
-
 // Sneltoetsen: 1 t/m 4 voor de schermen, pijltjes voor de verdiepingen op Thuis. Uit te zetten in het tandwiel.
 const SCHERMEN: Scherm[] = ['thuis', 'overzicht', 'apparaten', 'cameras'];
 document.addEventListener('keydown', (e) => {
@@ -1507,7 +1554,7 @@ setInterval(() => document.visibilityState === 'visible' && laadMedia(), 5_000);
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 tekenAlles();
 laadOverzicht();
-setInterval(laadOverzicht, 60_000);
+setInterval(() => document.visibilityState === 'visible' && laadOverzicht(), 60_000);
 laadHuis();
-setInterval(laadHuis, 5_000);
+setInterval(() => document.visibilityState === 'visible' && laadHuis(), 5_000);
 setInterval(() => document.visibilityState === 'visible' && tekenCamera(true), 10_000);

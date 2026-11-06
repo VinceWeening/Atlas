@@ -4,3 +4,4 @@ desktop/src-tauri/target/
 desktop/src-tauri/gen/
 .env
 data/
+.preview/
