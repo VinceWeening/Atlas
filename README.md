@@ -207,7 +207,9 @@ De Windows-app bouw je op Windows met `cd desktop && npm install && npm run buil
 
 ## Vernieuwde cockpit
 
-De navigatie staat op de pc links en op de telefoon onderin. Thuis groepeert de plattegrond, kamerbediening en camera in afzonderlijke vlakken; agenda en mail staan daaronder. Apparaten gebruikt een raster met grote aanraakvlakken. De bestaande keuzes voor blokken, startscherm, avondstand en beweging blijven gelden.
+Op de pc staat een compacte navigatieconsole bovenaan; op de telefoon staat de navigatie onderin. Thuis heeft een centraal woningmodel met cyaan glaswanden, warme lichtvlakken en subtiele HUD-ringen. Dagpanelen staan links, kamerbediening en camera rechts. Op smalle schermen stapelen de panelen. Apparaten gebruikt een raster met grote aanraakvlakken. De bestaande keuzes voor blokken, startscherm, avondstand en beweging blijven gelden.
+
+De ontwerpkeuzes en themarollen staan in [het ontwerpdocument](docs/design.md). De rustige stand behoudt dezelfde cockpit, met minder atmosferische effecten. Bewegingsvoorkeuren gelden ook voor de nieuwe vormgeving.
 
 Camera’s hebben een groot geselecteerd beeld en een camerakeuze. Het hele bronbeeld blijft zichtbaar. **Momentopname** en de tijd van de laatste succesvolle opname maken duidelijk hoe actueel het beeld is. Een mislukte verversing behoudt het vorige beeld van dezelfde camera; wisselen naar een andere camera wist het oude beeld direct.
 

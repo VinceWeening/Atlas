@@ -261,16 +261,11 @@ function tekenHuis() {
     // Verdiepingen boven de gekozen schuiven wat omhoog, zodat je van bovenaf goed in de gekozen verdieping kijkt.
     const z = gestapeld ? laag.z + (focus >= 0 && i > focus ? 90 : 0) : 0;
     vlak.style.transform = `translateZ(${z}px)`;
-    vlak.style.boxShadow = i === focus
-      ? '0 0 0 2px #D6EDFF, 0 0 40px rgba(111,168,255,0.35), 0 50px 80px -20px rgba(0,0,0,0.7)'
-      : gestapeld
-        ? '0 0 0 2px #C7CED8, 0 50px 80px -20px rgba(0,0,0,0.7)'
-        : '0 0 0 4px #C7CED8, 0 60px 90px -10px rgba(0,0,0,0.85)';
     // Op de naam van een verdieping klikken gaat naar die verdieping, en nog een keer klikken terug naar alles.
     const naam = maak('button', 'lbl laag-naam', laag.label);
     naam.type = 'button';
     naam.addEventListener('click', () => kiesVerdieping(staat.verdieping === laag.id ? 'alle' : laag.id));
-    if (staat.verdieping === laag.id) naam.style.color = '#D6EDFF';
+    if (staat.verdieping === laag.id) naam.style.color = 'var(--ijs-licht)';
     vlak.append(naam);
 
     for (const r of laag.ruimtes) {
@@ -783,10 +778,10 @@ function pasToe() {
   $('huis-knop').setAttribute('aria-pressed', String(!achter));
   $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
   const schermInfo = {
-    thuis: ['Alles op zijn plek.', 'Je huis en je dag, met ruimte voor rust.'],
-    overzicht: ['Jouw dag, helder in beeld.', 'Wat er speelt, op één plek. Jij kiest wat je ziet.'],
-    apparaten: ['Een huis dat luistert.', 'Zoek een apparaat, kies een ruimte en regel het hier.'],
-    cameras: ['Even kijken, gerust verder.', "Je camera's en gebeurtenissen op één plek."],
+    thuis: ['Huisoverzicht', 'Ruimtes, verlichting en zicht op thuis.'],
+    overzicht: ['Jouw overzicht', 'Je dag, huis en media bij elkaar.'],
+    apparaten: ['Apparaten', 'Bedien je huis per ruimte.'],
+    cameras: ["Camera’s", 'Kies een camera of bekijk een opname.'],
   }[staat.scherm];
   tekst($('scherm-titel'), schermInfo[0]);
   tekst($('scherm-uitleg'), schermInfo[1]);
