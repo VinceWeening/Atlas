@@ -43,3 +43,9 @@ test('refreshes do not overlap and clearing a camera invalidates pending work',(
   f.loader.zet(null); late(); assert.equal(f.image.src,''); assert.equal(f.image.hidden,true);
   assert.equal(f.timers.size,0);
 });
+
+test('renaming a camera updates its label without restarting an in-flight image',()=>{
+  const f=setup(); f.loader.zet(a); f.loader.zet({...a,naam:'Ingang'});
+  assert.match(f.image.alt,/Ingang/); assert.equal(f.pending.length,1);
+  f.pending[0].onload(); assert.match(f.image.alt,/Ingang/);
+});

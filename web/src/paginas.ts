@@ -361,7 +361,11 @@ export function maakCameras() {
   function zet(cameraLijst: Camera[]) {
     if (JSON.stringify(cameraLijst.map(({id,naam}) => [id,naam])) === JSON.stringify(cameras.map(({id,naam}) => [id,naam])) && lijst.childElementCount) return;
     cameras = cameraLijst;
-    if (open && !cameras.some((c) => c.id === open!.id)) groot.close();
+    if (open) {
+      const huidig = cameras.find((c) => c.id === open!.id);
+      if (!huidig) groot.close();
+      else { open = huidig; grootNaam.textContent = huidig.naam; grootLader.zet(huidig); }
+    }
     if (!cameras.length) {
       hoofdLader.zet(null);
       lijst.replaceChildren(maak('p', 'muted', 'Geen camera’s gevonden in Home Assistant.'));
