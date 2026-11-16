@@ -1,0 +1,105 @@
+:root {
+  --background: #101116;
+  --foreground: #f1f2f5;
+  --card: #1c1e25;
+  --secondary: #282b35;
+  --muted: #252832;
+  --muted-foreground: #b3b9c6;
+  --accent: #243c43;
+  --border: #393d47;
+  --glass-edge: #e3ecff23;
+  --glass: linear-gradient(145deg, #24262eea, #1a1b22f5);
+  --r-paneel: 23px;
+  --r-rij: 14px;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Geist, sans-serif;
+}
+
+.app, .app.rustig {
+  --r-paneel: 23px;
+  background: radial-gradient(ellipse at 52% 24%, #212635, transparent 58%), var(--background);
+}
+.app::before, .app .lucht { display: none; }
+.zijbalk { min-height: 68px; }
+.merk > span { letter-spacing: .14em; font-size: 17px; }
+.zijbalk .schermen { gap: 4px; border: 0; border-radius: 999px; background: #ffffff0a; }
+.zijbalk .schermen button { min-width: 108px; color: var(--muted-foreground); border-radius: 999px; font-size: 13px; font-weight: 600; }
+.zijbalk .schermen button[aria-pressed="true"] { background: #f5ffff18; color: var(--primary); box-shadow: none; }
+.zijbalk .schermen button[aria-pressed="true"]::after { display: none; }
+.app .stage, .app:not(.overzicht,.op-pagina) .stage { max-width: 1350px; }
+.rond-knop, .melding-status-knop { border-radius: 999px; background: #ffffff09; }
+.hud-chip { background: #ffffff08; border-radius: 999px; }
+.app .scherm-intro { padding-bottom: 12px; border: 0; }
+.scherm-intro h1 { font-size: clamp(32px, 4vw, 48px); font-weight: 700; letter-spacing: -.048em; }
+.verbinding { font-family: var(--sans); font-size: 12px; }
+.lbl, .model-label { font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+.app .huis-vak {
+  overflow: hidden;
+  border: 1px solid var(--glass-edge);
+  border-radius: 28px;
+  padding: 14px;
+  background: radial-gradient(ellipse at 50% 64%, #183941b0, transparent 68%), linear-gradient(150deg, #1c2932, #101820);
+}
+.huis-kop h2 { font-weight: 600; }
+.model-hud svg { opacity: .17; }
+.app :is(.links,.rechts) > .gl::before { display: none; }
+.kamer-naam { font-weight: 600; letter-spacing: -.025em; }
+.app .links .dock { width: 100%; }
+.app .links .dock-in { display: grid; padding: 14px; justify-content: stretch; }
+.app .links .dock-deel { justify-content: flex-start; }
+.app .links .dock-scheiding { width: 100%; height: 1px; }
+.dock-knop { border-radius: 13px; max-width: 100%; }
+.knop.apparaten-link,.knop.apparaten-terug { min-height: 44px; padding: 0 14px; color: var(--primary); background: var(--muted); justify-self: start; box-shadow: none; }
+.knop.apparaten-link { width: 100%; text-align: left; }
+.apparaten-link span { float: right; }
+.app.stand-avond.overzicht #kolom-dag > :is(.vandaag, .belangrijk, .mail) { display: block; }
+.app .kolom-kop, .app.rustig .kolom-kop { font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0; }
+.dag-weer p { font-size: 20px; font-weight: 600; }
+
+.camera-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.camera-modus { width: fit-content; padding: 4px; border-radius: 999px; background: var(--muted); }
+.camera-modus button { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 13px; white-space: nowrap; }
+.camera-modus button[aria-pressed="true"] { color: var(--primary); background: #e2ffff17; }
+.camera-multiview { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.app .camera-multiview .camera-overzicht-tegel { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; padding: 14px; text-align: left; color: inherit; }
+.camera-tegel-beeld { width: 100%; aspect-ratio: 16/9; border-radius: 11px; overflow: hidden; background: var(--background); }
+.camera-tegel-beeld img { width: 100%; height: 100%; object-fit: contain; }
+#camera-archief { display: grid; gap: 16px; }
+.camera-archief-filter { display: flex; align-items: center; gap: 12px; }
+.camera-archief-filter select { width: auto; min-height: 44px; }
+
+.inst-indeling { display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 22px; }
+.inst-indeling .inst-tabs { flex-direction: column; align-self: start; margin: 0; border-radius: 16px; }
+.inst-indeling .inst-tab { text-align: left; padding-inline: 14px; border-radius: 12px; }
+.inst-indeling .inst-paneel { min-height: 0; max-height: min(62dvh, 620px); overflow-y: auto; padding-inline: 3px 12px; }
+.inst-terug { display: none; }
+
+@media (min-width: 761px) and (max-width: 1050px) {
+  .app:not(.overzicht,.op-pagina) .links { grid-row: 4; grid-column: 1; }
+  .app:not(.overzicht,.op-pagina) .midden-onder { grid-column: 2; }
+  .app.huis-achter:not(.overzicht,.op-pagina) .links { grid-row: 3; }
+}
+@media (max-width: 760px) {
+  .zijbalk { min-height: 0; background: #14161de8; }
+  .zijbalk .schermen { background: none; }
+  .zijbalk .schermen button { min-width: 0; font-size: 12px; }
+  .app .scherm-intro { gap: 0; padding-bottom: 0; }
+  .scherm-intro h1 { font-size: 34px; }
+  .verbinding { font-size: 11px; }
+  .app .huis-vak { min-height: 426px; padding: 12px; }
+  .app .huis { min-height: 296px; }
+  .app .gebouw:not(.plat) { scale: .52; }
+  .app .links { order: 3; }
+  .app .midden-onder { order: 5; }
+  .camera-console .camera-keuzes { display: flex; flex-wrap: wrap; grid-row: 1; }
+  .camera-console .camera-keuze { flex: 1 1 auto; min-height: 44px; padding: 8px 12px; border-radius: 999px; text-align: center; }
+  .inst-indeling { grid-template-columns: minmax(0,1fr); gap: 10px; }
+  .inst-indeling .inst-paneel, .inst-indeling .inst-terug { display: none; }
+  .inst-indeling.inst-detail .inst-tabs { display: none; }
+  .inst-indeling.inst-detail .inst-paneel { display: block; }
+  .inst-indeling.inst-detail .inst-terug { display: block; justify-self: start; min-height: 44px; color: var(--primary); }
+}
+
+@media (max-width: 360px) {
+  .app .gebouw:not(.plat) { scale: .46; }
+}
+

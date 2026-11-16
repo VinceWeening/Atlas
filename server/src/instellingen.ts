@@ -98,8 +98,8 @@ const standaard: Instellingen = {
   weg: { aan: false, allesUit: true, alleenWeg: false },
   vertrek: { reistijd: 20, plekken: [] },
   assistent: { vragen: true, hardop: true, cloud: true, overMij: '' },
-  weergave: { rustig: true, beweging: true, agendaAantal: 3, mailAantal: 3 },
-  ingevouwen: [],
+  weergave: { rustig: true, beweging: true, agendaAantal: 1, mailAantal: 3 },
+  ingevouwen: ['kolom-huis', 'kolom-media'],
 };
 
 let huidig = lees<Instellingen>('instellingen', standaard);

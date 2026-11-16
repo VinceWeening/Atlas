@@ -22,12 +22,12 @@
   <div class="lucht" id="lucht" aria-hidden="true"></div>
 
 
-<a class="spring-link" href="#scherm-titel">Naar inhoud</a><aside class="zijbalk"><a class="merk" href="#" aria-label="Atlas, naar Thuis"><svg aria-hidden="true" viewBox="0 0 40 40" width="38" height="38" fill="none"><path d="m20 4 16 29H4L20 4Z" stroke="currentColor" stroke-width="1.4"/><path d="m20 15 7 13H13l7-13Z" fill="currentColor"/></svg><span>ATLAS<small>RESIDENTIAL OS</small></span></a>      <nav class="segment schermen" aria-label="Schermen">
+<a class="spring-link" href="#scherm-titel">Naar inhoud</a><aside class="zijbalk"><a class="merk" href="#" aria-label="Atlas, naar Thuis"><svg aria-hidden="true" viewBox="0 0 40 40" width="38" height="38" fill="none"><path d="m20 4 16 29H4L20 4Z" stroke="currentColor" stroke-width="1.4"/><path d="m20 15 7 13H13l7-13Z" fill="currentColor"/></svg><span>ATLAS</span></a>      <nav class="segment schermen" aria-label="Schermen">
         <button type="button" aria-label="Thuis" data-scherm="thuis" aria-keyshortcuts="1"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/></svg><span>Thuis</span></button>
-        <button type="button" aria-label="Overzicht" data-scherm="overzicht" aria-keyshortcuts="2"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Overzicht</span></button>
-        <button type="button" aria-label="Apparaten" data-scherm="apparaten" aria-keyshortcuts="3"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/></svg><span>Apparaten</span></button>
-        <button type="button" aria-label="Camera's" data-scherm="cameras" aria-keyshortcuts="4"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg><span>Camera's</span></button>
-      </nav><div class="zijbalk-voet"><span class="console-lijn" aria-hidden="true"></span><span>Jouw thuis. Verbonden.</span></div></aside>
+        <button type="button" aria-label="Mijn dag" data-scherm="overzicht" aria-keyshortcuts="2"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h3"/></svg><span>Mijn dag</span></button>
+
+        <button type="button" aria-label="Camera’s" data-scherm="cameras" aria-keyshortcuts="3"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg><span>Camera’s</span></button>
+      </nav></aside>
   <main class="stage" id="inhoud">
     <header class="gl bovenbalk"><div class="gl-in balk-in">
       <section class="klok" aria-label="Tijd en weer">
@@ -56,11 +56,11 @@
 
 
     <section class="scherm-intro" aria-labelledby="scherm-titel">
-      <div><p class="intro-label">ATLAS / CONTROL CENTRE</p><h1 id="scherm-titel" tabindex="-1">Huisoverzicht</h1><p id="scherm-uitleg" class="muted">Ruimtes, verlichting en zicht op thuis.</p></div>
+      <div><h1 id="scherm-titel" tabindex="-1">Thuis</h1></div>
       <button type="button" class="verbinding" id="verbinding" aria-label="Koppelingen bekijken"><span class="status-punt"></span><span id="verbinding-tekst">Verbinding maken…</span></button>
     </section>
     <section class="huis-vak" aria-label="Je huis">
-      <div class="huis-kop"><div><span class="intro-label">RUIMTELIJKE WEERGAVE</span><h2>Woningmodel</h2></div><span class="model-label">Indicatieve indeling</span></div>
+      <div class="huis-kop"><div><h2>Woningmodel</h2></div><span class="model-label">Indicatieve indeling</span></div>
       <div class="model-hud" aria-hidden="true"><svg viewBox="0 0 800 600" fill="none"><ellipse cx="400" cy="420" rx="320" ry="120"/><ellipse cx="400" cy="420" rx="290" ry="106" stroke-dasharray="2 12"/><ellipse cx="400" cy="420" rx="250" ry="90"/><path d="M40 420h100m520 0h100M400 280v40m0 200v40M80 100V70h40m560 0h40v30M80 490v30h40m560 0h40v-30"/><path class="hud-sterk" d="M80 70h40M680 70h40M80 520h40M680 520h40"/></svg></div>
       <div class="huis" id="huis" title="Scroll of gebruik de pijltjes om van verdieping te wisselen"></div>
             <nav class="verdieping-rail huis-bediening" aria-label="Verdiepingen en weergave">
@@ -113,6 +113,7 @@
         <div class="gl kamer-menu" id="kamer-menu" popover role="menu" aria-label="Kies een ruimte"></div>
         <div id="lampen" class="lijst lampen"></div>
       </div></section>
+      <button type="button" class="knop apparaten-link" data-scherm="apparaten" aria-keyshortcuts="4">Alle apparaten <span aria-hidden="true">›</span></button>
 
       <section class="gl voordeur" aria-label="Camera" data-blok="camera"><div class="gl-in camera-paneel">
         <div class="camera">
@@ -142,7 +143,11 @@
 
     <!-- Overzicht: drie kolommen die elk op hun eigen hoogte stapelen. -->
     <div class="kolommen" id="kolommen">
-      <section class="kolom" id="kolom-dag" aria-labelledby="kolom-dag-kop"><h2 class="kolom-kop" id="kolom-dag-kop">Mijn dag</h2></section>
+      <section class="kolom" id="kolom-dag" aria-labelledby="kolom-dag-kop"><h2 class="kolom-kop" id="kolom-dag-kop">Agenda en mail</h2>
+        <section class="gl dag-weer" aria-label="Weer"><div class="gl-in paneel">
+          <h2 class="lbl">Weer</h2><p id="dag-weer-tekst">Weer laden…</p>
+        </div></section>
+      </section>
       <section class="kolom" id="kolom-huis" aria-labelledby="kolom-huis-kop"><h2 class="kolom-kop" id="kolom-huis-kop">Huis</h2>
         <section class="gl" aria-label="Vandaag aan de deur" data-blok="tijdlijn" id="tijdlijn-blok"><div class="gl-in paneel">
           <div class="kop"><h2 class="lbl">Vandaag gezien</h2><span class="mono muted klein" id="tijdlijn-aantal"></span></div>
@@ -185,6 +190,7 @@
     </div>
 
     <section class="pagina" id="pagina-apparaten" aria-label="Apparaten" hidden>
+      <button type="button" class="knop apparaten-terug" data-scherm="thuis">‹ Terug naar Thuis</button>
       <div class="pagina-kop">
         <input class="inst-veld pagina-zoek" id="apparaten-zoek" type="search" placeholder="Zoek een apparaat of ruimte" aria-label="Zoek een apparaat of ruimte">
         <div class="segment filters" id="apparaten-filters" role="group" aria-label="Soort apparaat"></div>
@@ -193,13 +199,29 @@
     </section>
 
     <section class="pagina" id="pagina-cameras" aria-label="Camera's" hidden>
+      <div class="camera-toolbar">
+        <div class="segment camera-modus" role="group" aria-label="Camera’s bekijken">
+          <button type="button" id="camera-live" aria-pressed="true">Live</button>
+          <button type="button" id="camera-terugkijken" aria-pressed="false">Terugkijken</button>
+        </div>
+        <div class="segment camera-modus camera-indeling" id="camera-indeling" role="group" aria-label="Aantal beelden">
+          <button type="button" id="camera-een" aria-pressed="true">1 camera</button>
+          <button type="button" id="camera-alle" aria-pressed="false">Alle camera’s</button>
+        </div>
+      </div>
       <div class="camera-raster" id="cameras-lijst"></div>
+      <div id="camera-archief" hidden>
+        <div class="camera-archief-filter">
+          <label for="camera-filter">Camera</label>
+          <select class="inst-veld" id="camera-filter"></select>
+        </div>
       <section class="gl" aria-label="Vandaag gezien" id="tijdlijn-pagina"><div class="gl-in paneel">
         <div class="kop"><h2 class="lbl">Vandaag gezien</h2><span class="mono muted klein" id="tijdlijn-pagina-aantal"></span></div>
         <ol class="tijdlijn breed" id="tijdlijn-pagina-lijst"></ol>
       </div></section>
       <div class="kop"><h2 class="lbl">Terugkijken</h2></div>
       <div class="opnames" id="opnames-lijst"></div>
+      </div>
     </section>
 
   </main>

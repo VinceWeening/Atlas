@@ -309,6 +309,19 @@ export function maakCameras() {
   let cameras: Camera[] = [];
   let gekozen: string | null = null;
   let open: Camera | null = null;
+  const breed = matchMedia('(min-width: 761px)');
+  const liveKnop = document.querySelector<HTMLButtonElement>('#camera-live')!;
+  const archiefKnop = document.querySelector<HTMLButtonElement>('#camera-terugkijken')!;
+  const eenKnop = document.querySelector<HTMLButtonElement>('#camera-een')!;
+  const alleKnop = document.querySelector<HTMLButtonElement>('#camera-alle')!;
+  const indeling = document.getElementById('camera-indeling')!;
+  const archief = document.getElementById('camera-archief')!;
+  const filter = document.querySelector<HTMLSelectElement>('#camera-filter')!;
+  let terugkijken = false;
+  let alle = false;
+  try { alle = localStorage.getItem('atlas-camera-indeling') === 'alle'; } catch { /* Optioneel. */ }
+  const raster = maak('div', 'camera-multiview');
+  let laden: { camera: Camera; beeld: ReturnType<typeof maakCamerabeeld> }[] = [];
   const consoleVak = maak('div', 'camera-console');
   const hoofd = maak('section', 'gl camera-hoofd');
   const kop = maak('div', 'kop');
@@ -339,13 +352,13 @@ export function maakCameras() {
     gekozen = id;
     titel.textContent = camera.naam;
     grootKnop.setAttribute('aria-label', `${camera.naam} vergroten`);
-    hoofdLader.zet(camera);
+    if (!terugkijken && !(breed.matches && alle && cameras.length > 1)) hoofdLader.zet(camera);
     for (const knop of keuzes.querySelectorAll<HTMLElement>('[data-camera]')) {
       knop.setAttribute('aria-pressed', String(knop.dataset.camera === id));
     }
   }
-  function openGroot() {
-    const camera = cameras.find((c) => c.id === gekozen);
+  function openGroot(id: string | null = gekozen) {
+    const camera = cameras.find((c) => c.id === id);
     if (!camera) return;
     open = camera;
     grootNaam.textContent = camera.naam;
@@ -354,8 +367,8 @@ export function maakCameras() {
     groot.showModal();
     laadOpties(camera);
   }
-  grootKnop.addEventListener('click', openGroot);
-  vergroten.addEventListener('click', openGroot);
+  grootKnop.addEventListener('click', () => openGroot());
+  vergroten.addEventListener('click', () => openGroot());
   groot.addEventListener('close', () => grootLader.zet(null));
 
   function zet(cameraLijst: Camera[]) {
@@ -366,28 +379,75 @@ export function maakCameras() {
       if (!huidig) groot.close();
       else { open = huidig; grootNaam.textContent = huidig.naam; grootLader.zet(huidig); }
     }
+    laden.forEach(({ beeld }) => beeld.zet(null));
+    raster.replaceChildren();
+    laden = cameras.map((camera) => {
+      const kaart = maak('button', 'gl camera-overzicht-tegel');
+      kaart.type = 'button';
+      kaart.setAttribute('aria-label', `${camera.naam} vergroten`);
+      const foto = maak('img');
+      const beeldVak = maak('span', 'camera-tegel-beeld');
+      beeldVak.append(foto);
+      const melding = maak('span', 'camera-beeld-status');
+      kaart.append(maak('strong', undefined, camera.naam), beeldVak, melding);
+      kaart.addEventListener('click', () => { kies(camera.id); openGroot(camera.id); });
+      raster.append(kaart);
+      return { camera, beeld: maakCamerabeeld(foto, melding) };
+    });
+    const vorigeFilter = filter.value;
+    filter.replaceChildren(new Option('Alle camera’s', ''), ...cameras.map((camera) => new Option(camera.naam, camera.id)));
+    filter.value = cameras.some((camera) => camera.id === vorigeFilter) ? vorigeFilter : '';
     if (!cameras.length) {
+      toonWeergave();
       hoofdLader.zet(null);
       lijst.replaceChildren(maak('p', 'muted', 'Geen camera’s gevonden in Home Assistant.'));
       return;
     }
-    if (!lijst.contains(consoleVak)) lijst.replaceChildren(consoleVak);
+    if (!lijst.contains(consoleVak)) lijst.replaceChildren(consoleVak, raster);
     vervangMetFocus(keuzes, ...cameras.map((camera) => {
       const knop = maak('button', 'camera-keuze');
       knop.type = 'button';
       knop.dataset.camera = camera.id;
       knop.dataset.focus = camera.id;
-      knop.append(maak('strong', undefined, camera.naam), maak('span', undefined, 'Bekijk camera'));
+      knop.append(maak('strong', undefined, camera.naam));
       knop.addEventListener('click', () => kies(camera.id));
       return knop;
     }));
     kies(cameras.some((c) => c.id === gekozen) ? gekozen! : cameras[0].id);
+    toonWeergave();
   }
 
   function ververs() {
     if (document.visibilityState !== 'visible' || document.getElementById('pagina-cameras')!.hidden) return;
-    hoofdLader.ververs();
+    if (terugkijken) return;
+    if (breed.matches && alle && cameras.length > 1) laden.forEach(({ beeld }) => beeld.ververs());
+    else hoofdLader.ververs();
   }
+
+  function toonWeergave() {
+    const meerdere = breed.matches && alle && cameras.length > 1;
+    liveKnop.setAttribute('aria-pressed', String(!terugkijken));
+    archiefKnop.setAttribute('aria-pressed', String(terugkijken));
+    eenKnop.setAttribute('aria-pressed', String(!meerdere));
+    alleKnop.setAttribute('aria-pressed', String(meerdere));
+    indeling.hidden = terugkijken || !breed.matches || cameras.length < 2;
+    lijst.hidden = terugkijken;
+    archief.hidden = !terugkijken;
+    consoleVak.hidden = meerdere;
+    raster.hidden = !meerdere;
+    const geselecteerd = cameras.find(({ id }) => id === gekozen) ?? null;
+    hoofdLader.zet(!terugkijken && !meerdere ? geselecteerd : null);
+    laden.forEach(({ camera, beeld }) => beeld.zet(!terugkijken && meerdere ? camera : null));
+  }
+
+  function kiesIndeling(meerdere: boolean) {
+    alle = meerdere;
+    try { localStorage.setItem('atlas-camera-indeling', alle ? 'alle' : 'een'); } catch { /* Optioneel. */ }
+    toonWeergave();
+  }
+  eenKnop.addEventListener('click', () => kiesIndeling(false));
+  alleKnop.addEventListener('click', () => kiesIndeling(true));
+  breed.addEventListener('change', toonWeergave);
   setInterval(() => {
     if (open && groot.open && document.visibilityState === 'visible') grootLader.ververs();
   }, 2000);
@@ -502,27 +562,43 @@ export function maakCameras() {
   const videoVenster = document.getElementById('opname') as HTMLDialogElement;
   const video = document.getElementById('opname-video') as HTMLVideoElement;
   let opnamesSleutel = '';
+  let opnames: Opname[] | null = null;
+  let archiefLaden = false;
   async function laadOpnames() {
-    let opnames: Opname[] | null = null;
+    if (!terugkijken || archiefLaden) return;
+    archiefLaden = true;
     try {
       const antwoord = await fetch('/api/opnames');
       if (antwoord.ok) opnames = await antwoord.json();
+      else opnames = null;
     } catch {
-      // Hieronder een melding.
+      opnames = null;
+    } finally {
+      archiefLaden = false;
     }
-    const sleutel = JSON.stringify(opnames?.map((o) => o.id) ?? null);
+    tekenOpnames();
+  }
+  function tekenOpnames() {
+    const camera = cameras.find(({ id }) => id === filter.value);
+    const normaliseer = (naam: string) => naam.toLowerCase().replace(/[\W_]+/g, '');
+    const zichtbaar = camera ? opnames?.filter((o) =>
+      [camera.naam, camera.id.replace(/^camera\./, '')].some((naam) => normaliseer(naam) === normaliseer(o.camera)),
+    ) : opnames;
+    const tijdlijn = document.getElementById('tijdlijn-pagina')!;
+    tijdlijn.hidden = !!camera;
+    const sleutel = JSON.stringify([filter.value, zichtbaar?.map((o) => o.id) ?? null]);
     if (sleutel === opnamesSleutel) return;
     opnamesSleutel = sleutel;
-    if (!opnames) {
+    if (!zichtbaar) {
       opnamesLijst.replaceChildren(maak('p', 'muted klein', 'Frigate is niet gevonden of reageert niet.'));
       return;
     }
-    if (!opnames.length) {
-      opnamesLijst.replaceChildren(maak('p', 'muted klein', 'Nog geen opnames. Staat opnemen (record) aan in Frigate?'));
+    if (!zichtbaar.length) {
+      opnamesLijst.replaceChildren(maak('p', 'muted klein', camera ? `Geen opnames voor ${camera.naam}.` : 'Nog geen opnames beschikbaar.'));
       return;
     }
     opnamesLijst.replaceChildren(
-      ...opnames.map((o) => {
+      ...zichtbaar.map((o) => {
         const kaart = maak('button', 'gl opname-kaart');
         kaart.type = 'button';
         kaart.setAttribute('aria-label', `Opname ${o.titel} bij ${o.camera}, ${wanneer(o.tijd)} afspelen`);
@@ -545,6 +621,18 @@ export function maakCameras() {
       }),
     );
   }
+  filter.addEventListener('change', tekenOpnames);
+  liveKnop.addEventListener('click', () => { terugkijken = false; toonWeergave(); });
+  archiefKnop.addEventListener('click', () => {
+    if (terugkijken) return;
+    terugkijken = true;
+    filter.value = breed.matches && alle ? '' : gekozen ?? '';
+    toonWeergave();
+    if (opnamesSleutel) tekenOpnames();
+    else opnamesLijst.replaceChildren(maak('p', 'muted', 'Opnames laden…'));
+    void laadOpnames();
+  });
+  toonWeergave();
   document.getElementById('opname-sluit')!.addEventListener('click', () => videoVenster.close());
   videoVenster.addEventListener('click', (e) => e.target === videoVenster && videoVenster.close());
   videoVenster.addEventListener('close', () => {
