@@ -15,7 +15,7 @@ export type MediaDelen = {
   kan: { speel: boolean; vorige: boolean; volgende: boolean; volume: boolean; stappen: boolean; stil: boolean; bron: boolean; aan: boolean; uit: boolean };
   beeld: boolean;
 };
-type Media = { id: string; naam: string; bereikbaar: boolean; media: MediaDelen };
+export type Media = { id: string; naam: string; bereikbaar: boolean; media: MediaDelen };
 type Actie = 'speel' | 'vorige' | 'volgende' | 'volume' | 'harder' | 'zachter' | 'stil' | 'bron' | 'aan' | 'uit';
 
 function maak<K extends keyof HTMLElementTagNameMap>(tag: K, klasse?: string, inhoud?: string) {

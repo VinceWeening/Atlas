@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Google, type Afspraak } from './google.js';
-import { BEDIENBAAR, HomeAssistant, MEDIA_ACTIES, type MediaActie, haInstellingen } from './ha.js';
+import { BEDIENBAAR, HomeAssistant, MEDIA_ACTIES, TV_APPS, TV_TOETSEN, type MediaActie, type TvApp, type TvToets, haInstellingen } from './ha.js';
 import { SOORTEN, instellingen, zetInstellingen } from './instellingen.js';
 import { Meldingen } from './meldingen.js';
 import { Apps } from './apps.js';
@@ -217,6 +217,30 @@ app.post<{ Params: { id: string }; Body: { aan?: unknown } }>('/api/apparaat/:id
   if (!id || typeof request.body?.aan !== 'boolean') return reply.code(400).send({ fout: 'Dit apparaat kan Atlas niet bedienen' });
   if (!(await huis.bestaat(id))) return reply.code(404).send({ fout: 'Apparaat niet gevonden' });
   await huis.bedien(id, request.body.aan);
+  return { ok: true };
+});
+
+app.get('/api/tv-remotes', async (_request, reply) => {
+  if (!(huis instanceof HomeAssistant)) return [];
+  try {
+    return metEigenNamen(await huis.tvRemotes());
+  } catch (fout) {
+    app.log.warn(fout);
+    return reply.code(502).send({ fout: 'Tv-afstandsbedieningen niet bereikbaar' });
+  }
+});
+
+app.post<{ Params: { id: string }; Body: { toets?: unknown; app?: unknown } }>('/api/tv-remotes/:id', async (request, reply) => {
+  const id = entiteit('(?:remote|media_player)', request.params.id);
+  const { toets, app: tvApp } = request.body ?? {};
+  const knop = tvApp === undefined && TV_TOETSEN.includes(toets as TvToets);
+  const appGeldig = toets === undefined && typeof tvApp === 'string' && Object.hasOwn(TV_APPS, tvApp);
+  if (!id || (!knop && !appGeldig)) return reply.code(400).send({ fout: 'Onbekende afstandsbediening of opdracht' });
+  if (!(huis instanceof HomeAssistant)) return reply.code(404).send({ fout: 'Geen tv-afstandsbediening' });
+  const afstandsbediening = (await huis.tvRemotes()).find((tv) => tv.id === id);
+  if (!afstandsbediening?.bereikbaar) return reply.code(404).send({ fout: 'Tv-afstandsbediening niet bereikbaar' });
+  if (knop) await huis.tvToets(id, toets as TvToets);
+  else await huis.tvOpenApp(id, tvApp as TvApp);
   return { ok: true };
 });
 

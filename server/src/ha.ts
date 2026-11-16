@@ -68,6 +68,16 @@ export type MediaDelen = {
 export type Media = { id: string; naam: string; bereikbaar: boolean; media: MediaDelen };
 export const MEDIA_ACTIES = ['speel', 'vorige', 'volgende', 'volume', 'harder', 'zachter', 'stil', 'bron', 'aan', 'uit'] as const;
 export type MediaActie = (typeof MEDIA_ACTIES)[number];
+export const TV_TOETSEN = ['HOME', 'BACK', 'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', 'DPAD_CENTER', 'VOLUME_UP', 'VOLUME_DOWN', 'VOLUME_MUTE', 'MEDIA_PLAY_PAUSE', 'POWER'] as const;
+export type TvToets = (typeof TV_TOETSEN)[number];
+export const TV_APPS = {
+  youtube: ['https://www.youtube.com', 'com.google.android.youtube.tv'],
+  netflix: ['netflix://', 'com.netflix.ninja'],
+  prime: ['https://app.primevideo.com', 'com.amazon.amazonvideo.livingroom'],
+  disney: ['https://www.disneyplus.com', 'com.disney.disneyplus'],
+} as const;
+export type TvApp = keyof typeof TV_APPS;
+export type TvRemote = { id: string; naam: string; bereikbaar: boolean };
 export type Apparaten = { ruimtes: { id: string; naam: string; verdieping: string | null; apparaten: Apparaat[] }[]; overig: Apparaat[] };
 
 /** Soorten die op het scherm Apparaten komen, in deze volgorde. Camera's hebben een eigen scherm. */
@@ -286,6 +296,8 @@ export class HomeAssistant {
   private begin: { dag: number; standen: Record<string, number> } | null = null;
 
   constructor(private readonly instellingen: HaInstellingen) {}
+
+  private tvEntiteiten: { tijd: number; lijst: TvRemote[] } | null = null;
 
   private async vraag(pad: string, init: RequestInit = {}) {
     const antwoord = await fetch(`${this.instellingen.url}${pad}`, {
@@ -532,6 +544,39 @@ export class HomeAssistant {
       .filter((t) => t.entity_id.startsWith('media_player.'))
       .map((t) => ({ id: t.entity_id, naam: vriendelijk(t), bereikbaar: t.state !== 'unavailable', media: mediaDelen(t) }))
       .sort((a, b) => volgorde[a.media.staat] - volgorde[b.media.staat] || a.naam.localeCompare(b.naam, 'nl'));
+  }
+
+  async tvRemotes(): Promise<TvRemote[]> {
+    if (this.tvEntiteiten && Date.now() - this.tvEntiteiten.tijd < 15_000) return this.tvEntiteiten.lijst;
+    const template = `{% set native = integration_entities('androidtv_remote') | select('match', '^remote[.]') | list %}
+      {% set adb = integration_entities('androidtv') | select('match', '^media_player[.]') | list %}
+      [{% for e in native + adb %}{{ dict(id=e, naam=state_attr(e, 'friendly_name') or e, bereikbaar=has_value(e)) | tojson }}{{ ',' if not loop.last }}{% endfor %}]`;
+    const antwoord = await this.vraag('/api/template', { method: 'POST', body: JSON.stringify({ template }) });
+    const lijst = JSON.parse(await antwoord.text()) as TvRemote[];
+    this.tvEntiteiten = { tijd: Date.now(), lijst };
+    return lijst;
+  }
+
+  async tvToets(id: string, command: TvToets) {
+    if (id.startsWith('remote.')) {
+      await this.vraag('/api/services/remote/send_command', { method: 'POST', body: JSON.stringify({ entity_id: id, command }) });
+    } else {
+      const toetsen: Record<TvToets, string> = {
+        HOME: 'HOME', BACK: 'BACK', DPAD_UP: 'UP', DPAD_DOWN: 'DOWN', DPAD_LEFT: 'LEFT',
+        DPAD_RIGHT: 'RIGHT', DPAD_CENTER: 'CENTER', VOLUME_UP: 'VOLUME_UP', VOLUME_DOWN: 'VOLUME_DOWN',
+        VOLUME_MUTE: 'MUTE', MEDIA_PLAY_PAUSE: 'input keyevent 85', POWER: 'POWER',
+      };
+      await this.vraag('/api/services/androidtv/adb_command', { method: 'POST', body: JSON.stringify({ entity_id: id, command: toetsen[command] }) });
+    }
+  }
+
+  async tvOpenApp(id: string, app: TvApp) {
+    const [activity, source] = TV_APPS[app];
+    if (id.startsWith('remote.')) {
+      await this.vraag('/api/services/remote/turn_on', { method: 'POST', body: JSON.stringify({ entity_id: id, activity }) });
+    } else {
+      await this.mediaBedien(id, 'bron', source);
+    }
   }
 
   /** Bedient een tv of speaker. Volume is 0 tot 100; bron is een naam uit de bronnenlijst van het apparaat. */

@@ -14,9 +14,32 @@ async function start(scenario, t) {
   for (const name of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ANTHROPIC_API_KEY', 'WHISPER_URL', 'HA_URL', 'HA_TOKEN', 'FRIGATE_URL']) delete env[name];
   if (scenario !== 'demo' && scenario !== 'google-only') Object.assign(env, { HA_URL: 'http://ha.test', HA_TOKEN: 'test-only' });
   const fixture = `
+    import assert from 'node:assert/strict';
     globalThis.WebSocket = undefined;
     globalThis.fetch = async (url, init) => {
       const address = String(url);
+      if (address === 'http://ha.test/api/template' && JSON.parse(init.body).template.includes("integration_entities('androidtv_remote')")) {
+        return Response.json([
+          { id: 'remote.living_room', naam: 'Woonkamer', bereikbaar: true },
+          { id: 'media_player.bedroom', naam: 'Slaapkamer', bereikbaar: true },
+          { id: 'remote.offline', naam: 'Offline', bereikbaar: false },
+        ]);
+      }
+      if (address === 'http://ha.test/api/services/remote/send_command' || address === 'http://ha.test/api/services/androidtv/adb_command') {
+        const expected = address.endsWith('remote/send_command')
+          ? { entity_id: 'remote.living_room', command: 'DPAD_CENTER' }
+          : { entity_id: 'media_player.bedroom', command: 'RIGHT' };
+        assert.deepEqual(JSON.parse(init.body), expected);
+        return Response.json([]);
+      }
+      if (address === 'http://ha.test/api/services/remote/turn_on') {
+        assert.deepEqual(JSON.parse(init.body), { entity_id: 'remote.living_room', activity: 'netflix://' });
+        return Response.json([]);
+      }
+      if (address === 'http://ha.test/api/services/media_player/select_source') {
+        assert.deepEqual(JSON.parse(init.body), { entity_id: 'media_player.bedroom', source: 'com.google.android.youtube.tv' });
+        return Response.json([]);
+      }
       if (address === 'http://ollama.test/api/tags') return Response.json({ models: [{ name: 'qwen2.5:3b' }] });
       if (address === 'http://ollama.test/api/chat') {
         const input = JSON.parse(init.body);
@@ -62,12 +85,25 @@ async function start(scenario, t) {
       if (port) { clearTimeout(timeout); done('http://127.0.0.1:' + port); }
     });
   });
-  return async (path, body) => {
+  return async (path, body, status = 200) => {
     const response = await fetch(origin + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
-    assert.equal(response.status, 200, output);
+    assert.equal(response.status, status, output);
     return response.json();
   };
 }
+test('tv-toetsen gaan alleen naar gekoppelde tv’s en vertalen vaste knoppen per integratie', async (t) => {
+  const api = await start('unconfigured', t);
+  assert.equal((await api('/api/tv-remotes')).length, 3);
+  assert.deepEqual(await api('/api/tv-remotes/remote.living_room', { toets: 'DPAD_CENTER' }), { ok: true });
+  assert.deepEqual(await api('/api/tv-remotes/media_player.bedroom', { toets: 'DPAD_RIGHT' }), { ok: true });
+  assert.deepEqual(await api('/api/tv-remotes/remote.living_room', { app: 'netflix' }), { ok: true });
+  assert.deepEqual(await api('/api/tv-remotes/media_player.bedroom', { app: 'youtube' }), { ok: true });
+  await api('/api/tv-remotes/remote.living_room', { app: 'https://example.test/' }, 400);
+  await api('/api/tv-remotes/remote.living_room', { app: 'netflix', toets: 'HOME' }, 400);
+  await api('/api/tv-remotes/media_player.bedroom', { toets: 'input keyevent 3' }, 400);
+  await api('/api/tv-remotes/remote.unknown', { toets: 'HOME' }, 404);
+  await api('/api/tv-remotes/remote.offline', { toets: 'HOME' }, 404);
+});
 for (const scenario of ['unconfigured', 'uncoupled']) {
   test(`echt huis en Google ${scenario}: geen voorbeeldagenda, mail of vertrek`, async (t) => {
     const api = await start(scenario, t);
