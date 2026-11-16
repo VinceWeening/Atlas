@@ -14,6 +14,9 @@ import { laadEnergie } from './energie';
 import { kanSpraak, startOpdracht } from './opdracht';
 import { maakIndelen } from './indelen';
 import { maakMediaBlok } from './media';
+import { maakTvBediening } from './tv';
+
+maakTvBediening();
 
 type Overzicht = {
   voorbeeld: boolean;

@@ -90,6 +90,7 @@ const BLOKGROEPEN: [string, [string, string, string][]][] = [
     'Thuis en Overzicht',
     [
       ['huis', 'Huis', 'Het 3D-huis in het midden van Thuis'],
+      ['tv', 'Tv-afstandsbediening', 'Een afstandsbediening openen vanaf Thuis'],
       ['vandaag', 'Vandaag', 'Afspraken van vandaag en morgen'],
       ['belangrijk', 'Belangrijk', 'Deadlines en periodes uit het tabblad Data'],
       ['mail', 'Mail', 'Belangrijke mail uit Gmail'],

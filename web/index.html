@@ -74,6 +74,10 @@
     </section>
     <!-- Thuis: links de dag, rechts de kamer en de camera. Op Overzicht verhuizen deze blokken naar de kolommen. -->
     <div class="links" id="plek-links">
+      <button type="button" class="gl tv-open" id="tv-open" data-blok="tv">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 21h8"/></svg>
+        <span>Tv-afstandsbediening</span><span aria-hidden="true">›</span>
+      </button>
       <!-- Ochtend- en avondstand: een rustige kaart bovenaan met wat er vandaag (of morgen) is. -->
       <section class="gl dagstart" id="dagstart" data-blok="dagstart" aria-live="polite" hidden><div class="gl-in paneel">
         <p class="lbl" id="dagstart-label"></p>
@@ -225,6 +229,17 @@
     </section>
 
   </main>
+
+  <dialog class="gl tv-dialog" id="tv-dialog" aria-labelledby="tv-titel"><div class="gl-in paneel">
+    <div class="kop tv-kop">
+      <span class="tv-embleem" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="4.5" width="18" height="13" rx="3"/><path d="M8 21h8"/></svg></span>
+      <h2 class="kamer-naam" id="tv-titel">Tv-afstandsbediening</h2>
+      <button type="button" class="tv-sluit" id="tv-sluit" aria-label="Sluiten"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </div>
+    <label class="tv-select">Televisie <select class="inst-veld" id="tv-keuze"></select></label>
+    <div id="tv-bediening"></div>
+    <p id="tv-status" class="muted klein" role="status"></p>
+  </div></dialog>
 
   <dialog class="gl instellingen camera-groot" id="opname" aria-labelledby="opname-titel"><div class="gl-in paneel">
     <div class="kop"><h2 class="kamer-naam" id="opname-titel"></h2><button type="button" class="knop zacht" id="opname-sluit">Sluiten</button></div>
