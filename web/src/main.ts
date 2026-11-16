@@ -1,5 +1,6 @@
 import './styles.css';
 import './overhaul.css';
+import './woning.css';
 import { vervangMetFocus } from './dom';
 import { maakCamerabeeld } from './camerabeeld';
 import { lagen, type Ruimte } from './huis';
@@ -648,7 +649,9 @@ function tekenCamera(verversen = false) {
 
 function tekenWeer() {
   const weer = staat.huis?.weer ?? staat.overzicht?.weer;
-  tekst($('weer'), weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° ` : ''}${weer.omschrijving.toLowerCase()}` : '');
+  const weerTekst = weer ? `${weer.temperatuur != null ? `${Math.round(weer.temperatuur)}° · ` : ''}${weer.omschrijving}` : '';
+  tekst($('weer'), weerTekst);
+  tekst($('dag-weer-tekst'), weerTekst || 'Weer niet beschikbaar');
 }
 
 /** Een kleine chip in de bovenbalk, alleen zolang iets echt nog voorbeeld is. Klikken opent wat er nog gekoppeld moet. */
@@ -689,18 +692,20 @@ function tekenAlles() {
 // Waar de blokken staan. Op Thuis staan ze rond het huis; op Overzicht in drie kolommen die elk op hun eigen hoogte
 // stapelen, zodat er geen gaten vallen.
 const THUIS: [string, string[]][] = [
-  ['plek-links', ['dagstart', 'vandaag', 'belangrijk', 'mail']],
+  ['kolom-dag', ['vandaag', 'mail', 'belangrijk', 'dagstart']],
   ['plek-rechts', ['kamer', 'camera']],
 ];
 const OVERZICHT: [string, string[]][] = [
-  ['kolom-dag', ['dagstart', 'vandaag', 'belangrijk', 'mail']],
+  ['kolom-dag', ['vandaag', 'mail', 'belangrijk', 'dagstart']],
   ['kolom-huis', ['camera', 'tijdlijn', 'energie', 'kamer', 'favorieten', 'dock']],
 ];
 function zetBlokken(overzicht: boolean) {
   const blok = (id: string) => (id === 'dock' ? $('dock') : document.querySelector<HTMLElement>(`.stage [data-blok="${id}"]:not(.dock-deel)`)!);
   for (const [plek, ids] of overzicht ? OVERZICHT : THUIS) for (const id of ids) $(plek).append(blok(id));
-  if (!overzicht) $('plek-dock').append($('dock'));
+  if (!overzicht) $('plek-links').prepend($('dock'));
 }
+
+zetBlokken(false);
 
 let wisselKlaar: ReturnType<typeof setTimeout> | undefined;
 
@@ -777,17 +782,12 @@ function pasToe() {
   $('huis-knop').hidden = !huisUit || pagina || overzicht;
   $('huis-knop').setAttribute('aria-pressed', String(!achter));
   $('huis-knop').setAttribute('aria-label', achter ? 'Huis naar voren halen' : 'Huis naar achteren');
-  const schermInfo = {
-    thuis: ['Huisoverzicht', 'Ruimtes, verlichting en zicht op thuis.'],
-    overzicht: ['Jouw overzicht', 'Je dag, huis en media bij elkaar.'],
-    apparaten: ['Apparaten', 'Bedien je huis per ruimte.'],
-    cameras: ["Camera’s", 'Kies een camera of bekijk een opname.'],
-  }[staat.scherm];
-  tekst($('scherm-titel'), schermInfo[0]);
-  tekst($('scherm-uitleg'), schermInfo[1]);
-  document.title = `Atlas · ${{ thuis: 'Thuis', overzicht: 'Overzicht', apparaten: 'Apparaten', cameras: "Camera's" }[staat.scherm]}`;
+  const schermTitel = { thuis: 'Thuis', overzicht: 'Mijn dag', apparaten: 'Apparaten', cameras: 'Camera’s' }[staat.scherm];
+  tekst($('scherm-titel'), schermTitel);
+  document.title = `Atlas · ${schermTitel}`;
   document.querySelectorAll<HTMLButtonElement>('[data-scherm]').forEach((k) => {
-    const gekozen = k.dataset.scherm === staat.scherm;
+    const gekozen = k.dataset.scherm === staat.scherm ||
+      (k.closest('.schermen') && k.dataset.scherm === 'thuis' && staat.scherm === 'apparaten');
     k.setAttribute('aria-pressed', String(gekozen));
     if (gekozen) k.setAttribute('aria-current', 'page');
     else k.removeAttribute('aria-current');
@@ -1333,7 +1333,7 @@ function tekenOverzicht(o: Overzicht) {
     vervangMetFocus($('agenda'), koppelKaart('Agenda')); vervangMetFocus($('mail'), koppelKaart('Mail'));
     return;
   }
-  const agendaMax = staat.inst?.weergave.agendaAantal ?? 3;
+  const agendaMax = staat.inst?.weergave.agendaAantal ?? 1;
   const mailMax = staat.inst?.weergave.mailAantal ?? 3;
   tekst($('aantal-afspraken'), o.agendaFout ? 'niet bereikbaar' : `${o.agenda.length} ${o.agenda.length === 1 ? 'afspraak' : 'afspraken'}`);
   vervangMetFocus($('agenda'),
@@ -1466,7 +1466,7 @@ $('camera-wissel').addEventListener('click', () => {
   tekenCamera();
 });
 // Sneltoetsen: 1 t/m 4 voor de schermen, pijltjes voor de verdiepingen op Thuis. Uit te zetten in het tandwiel.
-const SCHERMEN: Scherm[] = ['thuis', 'overzicht', 'apparaten', 'cameras'];
+const SCHERMEN: Scherm[] = ['thuis', 'overzicht', 'cameras', 'apparaten'];
 document.addEventListener('keydown', (e) => {
   if (staat.inst?.blokken.sneltoetsen === false || e.ctrlKey || e.metaKey || e.altKey) return;
   const doel = e.target as HTMLElement;

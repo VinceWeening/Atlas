@@ -227,7 +227,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     basis.addEventListener('click', async () => {
       basis.disabled = true;
       try {
-        inst = await bewaar({ weergave: { rustig: true, agendaAantal: 3, mailAantal: 3 }, ingevouwen: [...new Set([...inst.ingevouwen, 'tijdlijn', 'energie', 'frigate', 'media', 'camera', 'favorieten'])] });
+        inst = await bewaar({ weergave: { rustig: true, agendaAantal: 1, mailAantal: 3 }, ingevouwen: [...new Set([...inst.ingevouwen, 'tijdlijn', 'energie', 'frigate', 'media', 'camera', 'favorieten'])] });
         await teken();
       } catch { basisStatus.textContent = 'Bewaren lukte niet. Probeer opnieuw.'; }
       finally { basis.disabled = false; }
@@ -743,7 +743,7 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
 
   // Tabbladen in plaats van één lange lijst. Het laatst gekozen tabblad blijft open bij de volgende keer.
   const TABS = [
-    ['scherm', 'Scherm'],
+    ['scherm', 'Weergave'],
     ['data', 'Data'],
     ['meldingen', 'Meldingen'],
     ['knoppen', 'Knoppen'],
@@ -770,16 +770,28 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     const balk = maak('div', 'inst-tabs');
     balk.setAttribute('role', 'tablist');
     balk.setAttribute('aria-label', 'Onderdelen van de instellingen');
+    balk.setAttribute('aria-orientation', 'vertical');
     const vak = maak('div', 'inst-paneel');
     vak.setAttribute('role', 'tabpanel');
+    const indeling = maak('div', 'inst-indeling');
+    const terug = knop('‹ Alle instellingen', 'knop inst-terug');
+    terug.addEventListener('click', () => {
+      indeling.classList.remove('inst-detail');
+      knoppen.find((k) => k.getAttribute('aria-selected') === 'true')?.focus();
+    });
     const knoppen = TABS.map(([id, naam]) => {
       const k = knop(naam, 'inst-tab');
       k.setAttribute('role', 'tab');
       k.id = `inst-tab-${id}`;
-      k.addEventListener('click', () => kies(id));
+      k.addEventListener('click', () => {
+        kies(id);
+        indeling.classList.add('inst-detail');
+        if (matchMedia('(max-width: 760px)').matches) terug.focus();
+      });
       k.addEventListener('keydown', (e) => {
-        const stap = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        const stap = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
         if (!stap) return;
+        e.preventDefault();
         const volgende = TABS[(TABS.findIndex(([t]) => t === id) + stap + TABS.length) % TABS.length][0];
         kies(volgende);
         document.getElementById(`inst-tab-${volgende}`)?.focus();
@@ -804,7 +816,9 @@ export function instellingen(terug: { google: () => void; opgeslagen: (inst: Ins
     }
     balk.append(...knoppen);
     // Staat er een nieuwe versie klaar, dan staat die bovenaan, los van de tabbladen.
-    inhoud.replaceChildren(...(nieuw ? [versie] : []), balk, vak);
+    indeling.append(balk, terug, vak);
+    if (tab !== 'scherm') indeling.classList.add('inst-detail');
+    inhoud.replaceChildren(...(nieuw ? [versie] : []), indeling);
     kies(tab);
     await tekenGoogle(google);
   }

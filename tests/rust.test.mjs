@@ -26,7 +26,7 @@ test('oude instellingen houden hun kanalen en blokkeuzes bij uitbreiding', () =>
   assert.equal(basis.meldingen.wachttijd, 10);
   assert.equal(basis.blokken.camera, false);
   assert.deepEqual(basis.ingevouwen, ['energie']);
-  assert.deepEqual(basis.weergave, { rustig: true, beweging: true, agendaAantal: 3, mailAantal: 3 });
+  assert.deepEqual(basis.weergave, { rustig: true, beweging: true, agendaAantal: 1, mailAantal: 3 });
 });
 
 test('ongeldige instellingen worden atomair geweigerd', () => {
@@ -48,7 +48,7 @@ test('gedeeltelijke wijzigingen worden bewaard zonder andere voorkeuren te wisse
   assert.equal(zetInstellingen({ weergave: { mailAantal: 1 }, meldingen: { popup: false, duur: 4 } }), null);
   const bewaard = JSON.parse(readFileSync(join(map, 'instellingen.json'), 'utf8'));
   assert.equal(bewaard.weergave.mailAantal, 1);
-  assert.equal(bewaard.weergave.agendaAantal, 3);
+  assert.equal(bewaard.weergave.agendaAantal, 1);
   assert.equal(bewaard.meldingen.pc, false);
   assert.equal(bewaard.meldingen.popup, false);
   assert.equal(bewaard.blokken.camera, false);
